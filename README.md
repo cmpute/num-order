@@ -1,0 +1,1 @@
+Numerically consistent `Eq`, `Ord` and `Hash` implementations for various `num` types.
