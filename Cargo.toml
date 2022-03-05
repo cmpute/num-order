@@ -3,6 +3,7 @@ name = "num-order"
 version = "0.0.1"
 edition = "2018"
 
+license = "Apache-2.0"
 description = "Numerically consistent `Eq`, `Ord` and `Hash` implementations for various `num` types"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
