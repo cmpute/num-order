@@ -1,3 +1,8 @@
+//!
+//! Compare with [float-ord](https://crates.io/crates/float-ord), [num-cmp](https://crates.io/crates/num-cmp), [numcmp](https://crates.io/crates/numcmp)
+//! 
+
+
 use core::cmp::Ordering;
 use core::hash::Hasher;
 
@@ -18,7 +23,7 @@ pub trait NumOrd<Other> {
     }
     #[inline]
     fn num_le(&self, other: &Other) -> bool {
-        !self.num_gt(other)
+        matches!(self.num_partial_cmp(other), Some(Ordering::Equal) | Some(Ordering::Less))
     }
     #[inline]
     fn num_gt(&self, other: &Other) -> bool {
@@ -26,7 +31,7 @@ pub trait NumOrd<Other> {
     }
     #[inline]
     fn num_ge(&self, other: &Other) -> bool {
-        !self.num_le(other)
+        matches!(self.num_partial_cmp(other), Some(Ordering::Equal) | Some(Ordering::Greater))
     }
     #[inline]
     fn num_cmp(&self, other: &Other) -> Ordering {
@@ -40,3 +45,4 @@ pub trait NumHash {
 
 mod ord;
 mod hash;
+#[cfg(test)] mod tests;

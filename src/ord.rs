@@ -1,8 +1,3 @@
-// REF:
-//      https://crates.io/crates/float-ord
-//      https://crates.io/crates/num-cmp
-//      https://crates.io/crates/numcmp
-
 use crate::NumOrd;
 use core::cmp::Ordering;
 
@@ -78,7 +73,7 @@ impl_ord_with_casting! {
 
 // Case3: trivial logic for comparing signed and unsigned integers
 macro_rules! impl_ord_between_diff_sign {
-    ($($unsigned:ty => $signed:ty;)*) => ($(
+    ($($signed:ty => $unsigned:ty;)*) => ($(
         impl NumOrd<$signed> for $unsigned {
             #[inline]
             fn num_partial_cmp(&self, other: &$signed) -> Option<Ordering> {
@@ -107,7 +102,7 @@ impl_ord_between_diff_sign! {
     i16  => u128; i16 => u64; i16 => u32 ; i16 => u16;
     i32  => u128; i32 => u64; i32 => u32 ;
     i64  => u128; i64 => u64;
-    i128 => u128; usize => isize;
+    i128 => u128; isize => usize;
 }
 
 // Case4: special handling for comparing float and integer types
@@ -119,9 +114,9 @@ macro_rules! impl_ord_between_int_float {
             fn num_partial_cmp(&self, other: &$float) -> Option<Ordering> {
                 if other.is_nan() {
                     None
-                } else if other < &(<$int>::MIN as $float) {
+                } else if other < &(<$int>::MIN as $float) { // integer min is on binary boundary
                     Some(Ordering::Greater)
-                } else if other > &(<$int>::MAX as $float) {
+                } else if other >= &(<$int>::MAX as $float) { // integer max is not on binary boundary
                     Some(Ordering::Less)
                 } else {
                     let trunc = other.trunc();
@@ -134,9 +129,9 @@ macro_rules! impl_ord_between_int_float {
             fn num_partial_cmp(&self, other: &$int) -> Option<Ordering> {
                 if self.is_nan() {
                     None
-                } else if self < &(<$int>::MIN as $float) {
+                } else if self < &(<$int>::MIN as $float) { // integer min is on binary boundary
                     Some(Ordering::Less)
-                } else if self > &(<$int>::MAX as $float) {
+                } else if self >= &(<$int>::MAX as $float) { // integer max is not on binary boundary
                     Some(Ordering::Greater)
                 } else {
                     let trunc = self.trunc();
@@ -153,28 +148,46 @@ impl_ord_between_int_float! {
 }
 
 // Case5: forward size integers to corresponding concrete types
-macro_rules! impl_ord_for_size_types {
-    ($size:ty => $nonsize:ty, $($other:ty)*) => ($(
-        impl NumOrd<$other> for $size {
+macro_rules! impl_ord_with_size_types {
+    ($($t:ty)*) => ($(
+        impl NumOrd<$t> for usize {
             #[inline]
-            fn num_partial_cmp(&self, other: &$other) -> Option<Ordering> {
-                (*self as $nonsize).num_partial_cmp(other)
+            fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                #[cfg(target_pointer_width = "32")]
+                { (*self as u32).num_partial_cmp(other) }
+                #[cfg(target_pointer_width = "64")]
+                { (*self as u64).num_partial_cmp(other) }
             }
         }
-        impl NumOrd<$size> for $other {
+        impl NumOrd<usize> for $t {
             #[inline]
-            fn num_partial_cmp(&self, other: &$size) -> Option<Ordering> {
-                self.num_partial_cmp(&(*other as $nonsize))
+            fn num_partial_cmp(&self, other: &usize) -> Option<Ordering> {
+                #[cfg(target_pointer_width = "32")]
+                { self.num_partial_cmp(&(*other as u32)) }
+                #[cfg(target_pointer_width = "64")]
+                { self.num_partial_cmp(&(*other as u64)) }
+            }
+        }
+        impl NumOrd<$t> for isize {
+            #[inline]
+            fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                #[cfg(target_pointer_width = "32")]
+                { (*self as i32).num_partial_cmp(other) }
+                #[cfg(target_pointer_width = "64")]
+                { (*self as i64).num_partial_cmp(other) }
+            }
+        }
+        impl NumOrd<isize> for $t {
+            #[inline]
+            fn num_partial_cmp(&self, other: &isize) -> Option<Ordering> {
+                #[cfg(target_pointer_width = "32")]
+                { self.num_partial_cmp(&(*other as i32)) }
+                #[cfg(target_pointer_width = "64")]
+                { self.num_partial_cmp(&(*other as i64)) }
             }
         }
     )*);
 }
 
-#[cfg(target_pointer_width = "32")]
-impl_ord_for_size_types!(usize => u32, u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
-#[cfg(target_pointer_width = "32")]
-impl_ord_for_size_types!(isize => i32, u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
 #[cfg(target_pointer_width = "64")]
-impl_ord_for_size_types!(usize => u64, u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
-#[cfg(target_pointer_width = "64")]
-impl_ord_for_size_types!(isize => i64, u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
+impl_ord_with_size_types!(u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
