@@ -1,5 +1,5 @@
 [package]
-name = "num-hash"
+name = "num-order"
 version = "0.0.1"
 edition = "2018"
 
@@ -8,3 +8,8 @@ description = "Numerically consistent `Eq`, `Ord` and `Hash` implementations for
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+libm = { version = "0.2.0", optional = true }
+
+[features]
+default = ['libm']
+std = []

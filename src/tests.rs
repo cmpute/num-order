@@ -1,5 +1,6 @@
 use super::*;
 use std::fmt;
+use std::vec::Vec;
 use std::cmp::Ordering::{self, *};
 
 #[derive(Clone, Debug)]

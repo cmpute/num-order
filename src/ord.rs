@@ -107,6 +107,23 @@ impl_ord_between_diff_sign! {
 
 // Case4: special handling for comparing float and integer types
 // Note: if `a` is an integer, `a cmp b` equals to `(a, trunc(b)) cmp (trunc(b), b)` (lexicographically)
+#[cfg(feature = "libm")]
+trait Trunc {
+    fn trunc(self) -> Self;
+}
+#[cfg(feature = "libm")]
+impl Trunc for f32 {
+    fn trunc(self) -> Self {
+        libm::truncf(self)
+    }
+}
+#[cfg(feature = "libm")]
+impl Trunc for f64 {
+    fn trunc(self) -> Self {
+        libm::trunc(self)
+    }
+}
+
 macro_rules! impl_ord_between_int_float {
     ($($float:ty | $int:ty;)*) => ($(
         impl NumOrd<$float> for $int {
