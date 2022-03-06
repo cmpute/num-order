@@ -1,4 +1,5 @@
 use super::*;
+use std::hash::{Hash, Hasher};
 use std::fmt;
 use std::vec::Vec;
 use std::cmp::Ordering::{self, *};
@@ -23,61 +24,11 @@ macro_rules! repeat_arms {
     };
 }
 
-fn assert_cmp<T: Into<Option<Ordering>>>(lhs: &N, rhs: &N, expected: T) {
-    #[derive(PartialEq)]
-    struct Result {
-        ord: Option<Ordering>,
-        eq: bool, ne: bool, lt: bool, gt: bool, le: bool, ge: bool,
-    }
-
-    impl fmt::Debug for Result {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            if let Some(ord) = self.ord {
-                write!(f, "<{:?} (", ord)?;
-            } else {
-                write!(f, "<_ (")?;
-            }
-            let neg = |b: bool| if b { "" } else { "!" };
-            write!(f, "{}eq {}ne {}lt {}gt {}le {}ge)>",
-                   neg(self.eq), neg(self.ne),
-                   neg(self.lt), neg(self.gt),
-                   neg(self.le), neg(self.gt))
+impl Hash for N {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        repeat_arms! {
+            self; v => v.num_hash(state)
         }
-    }
-
-    let expected: Option<Ordering> = expected.into();
-    let expected = match expected {
-        Some(Less) => {
-            Result { ord: expected, eq: false, ne: true,
-                     lt: true, gt: false, le: true, ge: false }
-        },
-        Some(Equal) => {
-            Result { ord: expected, eq: true, ne: false,
-                     lt: false, gt: false, le: true, ge: true }
-        },
-        Some(Greater) => {
-            Result { ord: expected, eq: false, ne: true,
-                     lt: false, gt: true, le: false, ge: true }
-        },
-        None => {
-            Result { ord: expected, eq: false, ne: true,
-                     lt: false, gt: false, le: false, ge: false }
-        },
-    };
-
-    let actual = repeat_arms! {
-        lhs; x => {
-            repeat_arms! {
-                rhs; y => 
-                     Result { ord: x.num_partial_cmp(y), eq: x.num_eq(y), ne: x.num_ne(y),
-                              lt: x.num_lt(y), gt: x.num_gt(y), le: x.num_le(y), ge: x.num_ge(y) }
-            }
-        }
-    };
-
-    if expected != actual {
-        panic!("failed to compare {:?} against {:?}; expected {:?}, actual {:?}",
-               lhs, rhs, expected, actual);
     }
 }
 
@@ -420,6 +371,62 @@ fn expand_equiv_class(cls: &[N]) -> Vec<N> {
     ret
 }
 
+fn assert_cmp<T: Into<Option<Ordering>>>(lhs: &N, rhs: &N, expected: T) {
+    #[derive(PartialEq)]
+    struct Result {
+        ord: Option<Ordering>,
+        eq: bool, ne: bool, lt: bool, gt: bool, le: bool, ge: bool,
+    }
+
+    impl fmt::Debug for Result {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            if let Some(ord) = self.ord {
+                write!(f, "<{:?} (", ord)?;
+            } else {
+                write!(f, "<_ (")?;
+            }
+            let neg = |b: bool| if b { "" } else { "!" };
+            write!(f, "{}eq {}ne {}lt {}gt {}le {}ge)>",
+                   neg(self.eq), neg(self.ne),
+                   neg(self.lt), neg(self.gt),
+                   neg(self.le), neg(self.gt))
+        }
+    }
+
+    let expected: Option<Ordering> = expected.into();
+    let expected = match expected {
+        Some(Less) => {
+            Result { ord: expected, eq: false, ne: true,
+                     lt: true, gt: false, le: true, ge: false }
+        },
+        Some(Equal) => {
+            Result { ord: expected, eq: true, ne: false,
+                     lt: false, gt: false, le: true, ge: true }
+        },
+        Some(Greater) => {
+            Result { ord: expected, eq: false, ne: true,
+                     lt: false, gt: true, le: false, ge: true }
+        },
+        None => {
+            Result { ord: expected, eq: false, ne: true,
+                     lt: false, gt: false, le: false, ge: false }
+        },
+    };
+
+    let actual = repeat_arms! {
+        lhs; x => {
+            repeat_arms! {
+                rhs; y => 
+                     Result { ord: x.num_partial_cmp(y), eq: x.num_eq(y), ne: x.num_ne(y),
+                              lt: x.num_lt(y), gt: x.num_gt(y), le: x.num_le(y), ge: x.num_ge(y) }
+            }
+        }
+    };
+
+    assert_eq!(expected, actual, "failed to compare {:?} against {:?}",
+        lhs, rhs);
+}
+
 #[test]
 fn test_ordering() {
     let numbers: Vec<_> = NUMBERS.iter().map(|cls| expand_equiv_class(cls)).collect();
@@ -456,4 +463,23 @@ fn test_nan() {
     assert_cmp(&N::f32(f32::NAN), &N::f64(f64::NAN), None);
     assert_cmp(&N::f64(f64::NAN), &N::f32(f32::NAN), None);
     assert_cmp(&N::f64(f64::NAN), &N::f64(f64::NAN), None);
+}
+
+
+#[test]
+fn test_hash() {
+    use std::collections::hash_map::DefaultHasher;
+    
+    fn hash(num: &N) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        num.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    for &equiv in NUMBERS {
+        let hashes: Vec<u64> = equiv.iter().map(|n| hash(n)).collect();
+        for i in 1..equiv.len() {
+            assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", equiv[0], equiv[i]);
+        }
+    }
 }
