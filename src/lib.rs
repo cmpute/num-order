@@ -1,11 +1,12 @@
 //!
-//! `num-order` implements numerically consistent [Eq][std::cmp::Eq], [Ord][std::cmp::Ord] and
-//! [Hash][std::hash::Hash] for various `num` types
+//! `num-order` implements numerically consistent [Eq][core::cmp::Eq], [Ord][core::cmp::Ord] and
+//! [Hash][core::hash::Hash] for various `num` types.
 //! 
-//! # Example:
 //! ```rust
 //! use std::cmp::Ordering;
-//! use num_order::NumOrd;
+//! use std::hash::Hasher;
+//! use std::collections::hash_map::DefaultHasher;
+//! use num_order::{NumOrd, NumHash};
 //! 
 //! assert!(NumOrd::num_eq(&3u64, &3.0f32));
 //! assert!(NumOrd::num_lt(&-4.7f64, &-4i8));
@@ -16,11 +17,18 @@
 //! assert_eq!(NumOrd::num_cmp(&40_000_000f32, &40_000_000u32), Ordering::Equal);
 //! assert_ne!(NumOrd::num_cmp(&40_000_001f32, &40_000_001u32), Ordering::Equal);
 //! assert_eq!(NumOrd::num_partial_cmp(&f32::NAN, &40_000_002u32), None);
+//! 
+//! // same hash values are guaranteed for equal numbers
+//! let mut hasher1 = DefaultHasher::new();
+//! 3u64.num_hash(&mut hasher1);
+//! let mut hasher2 = DefaultHasher::new();
+//! 3.0f32.num_hash(&mut hasher2);
+//! assert_eq!(hasher1.finish(), hasher2.finish())
 //! ```
 //! 
-//! This crate serves applications where [float-ord](https://crates.io/crates/float-ord),
-//! [num-cmp](https://crates.io/crates/num-cmp), [numcmp](https://crates.io/crates/numcmp) can be used,
-//! but supports more numeric types and hashing.
+//! This crate can serve applications where [float-ord](https://crates.io/crates/float-ord),
+//! [num-cmp](https://crates.io/crates/num-cmp), [numcmp](https://crates.io/crates/numcmp) are used.
+//! Meanwhile it also supports hashing and more numeric types.
 //! 
 
 #![no_std]
@@ -32,40 +40,53 @@ extern crate libm;
 use core::cmp::Ordering;
 use core::hash::Hasher;
 
+/// Consistent comparison among different numeric types.
 pub trait NumOrd<Other> {
+    /// [PartialOrd::partial_cmp] on different numeric types
     fn num_partial_cmp(&self, other: &Other) -> Option<Ordering>;
 
     #[inline]
+    /// [PartialEq::eq] on different numeric types
     fn num_eq(&self, other: &Other) -> bool {
         matches!(self.num_partial_cmp(other), Some(Ordering::Equal))
     }
     #[inline]
+    /// [PartialEq::ne] on different numeric types
     fn num_ne(&self, other: &Other) -> bool {
         !self.num_eq(other)
     }
     #[inline]
+    /// [PartialOrd::lt] on different numeric types
     fn num_lt(&self, other: &Other) -> bool {
         matches!(self.num_partial_cmp(other), Some(Ordering::Less))
     }
     #[inline]
+    /// [PartialOrd::le] on different numeric types
     fn num_le(&self, other: &Other) -> bool {
         matches!(self.num_partial_cmp(other), Some(Ordering::Equal) | Some(Ordering::Less))
     }
     #[inline]
+    /// [PartialOrd::gt] on different numeric types
     fn num_gt(&self, other: &Other) -> bool {
         matches!(self.num_partial_cmp(other), Some(Ordering::Greater))
     }
     #[inline]
+    /// [PartialOrd::ge] on different numeric types
     fn num_ge(&self, other: &Other) -> bool {
         matches!(self.num_partial_cmp(other), Some(Ordering::Equal) | Some(Ordering::Greater))
     }
     #[inline]
+    /// [Ord::cmp] on different numeric types. It panics if either of the numeric values contains NaN.
     fn num_cmp(&self, other: &Other) -> Ordering {
         self.num_partial_cmp(other).unwrap()
     }
 }
 
+/// Consistent hash implementation among different numeric types.
 pub trait NumHash {
+    /// Consistent [Hash::hash][core::hash::Hash::hash] on different numeric types.
+    /// 
+    /// This function will ensures if `a.num_eq(b)`, then `a.num_hash()` and `b.num_hash()` manipulate the state in the same way.
     fn num_hash<H: Hasher>(&self, state: &mut H);
 }
 
