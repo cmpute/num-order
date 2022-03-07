@@ -1,10 +1,10 @@
 [package]
 name = "num-order"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2018"
 
 license = "Apache-2.0"
-description = "Numerically consistent `Eq`, `Ord` and `Hash` implementations for various `num` types"
+description = "Numerically consistent `Eq`, `Ord` and `Hash` implementations for various `num` types (`u32`, `f64`, `num_bigint::BigInt`, etc.)"
 repository = "https://github.com/cmpute/num-order"
 keywords = ["numeric", "comparison", "hash", "order"]
 categories = ["mathematics", "science", "algorithms"]

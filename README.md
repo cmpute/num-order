@@ -1,4 +1,4 @@
-Numerically consistent `Eq`, `Ord` and `Hash` implementations for various `num` types.
+Numerically consistent `Eq`, `Ord` and `Hash` implementations for various `num` types (`u32`, `f64`, `num_bigint::BigInt`, etc.).
 
 # Example
 ```rust
@@ -25,5 +25,4 @@ let mut hasher2 = DefaultHasher::new();
 assert_eq!(hasher1.finish(), hasher2.finish())
 ```
 
-<!-- v0.1: support primitive types -->
 <!-- v0.2: support num-bigint, num-complex, num-irrational -->
