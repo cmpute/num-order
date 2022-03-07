@@ -90,4 +90,22 @@ macro_rules! impl_hash_for_float {
 }
 impl_hash_for_float! { f32 f64 }
 
+#[cfg(feature = "num-bigint")]
+mod _num_bigint {
+    use super::*;
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::ToPrimitive;
+
+    impl NumHash for BigUint {
+        fn num_hash<H: Hasher>(&self, state: &mut H) {
+            (self % BigUint::from(M61 as u64)).to_i64().unwrap().hash(state)
+        }
+    }
+    impl NumHash for BigInt {
+        fn num_hash<H: Hasher>(&self, state: &mut H) {
+            (self % BigInt::from(M61)).to_i64().unwrap().hash(state)
+        }
+    }
+}
+
 // Case4: for a + b*sqrt(r), the hash is `hash(a + P64*b^2*r)`

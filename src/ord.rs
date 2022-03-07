@@ -1,5 +1,18 @@
 use crate::NumOrd;
+use core::convert::TryFrom;
 use core::cmp::Ordering;
+
+// Case0: swap operand, this introduces overhead so only used for non-primitive types
+macro_rules! impl_by_swap {
+    ($($t1:ty | $t2:ty;)*) => ($(
+        impl NumOrd<$t2> for $t1 {
+            #[inline]
+            fn num_partial_cmp(&self, other: &$t2) -> Option<Ordering> {
+                other.num_partial_cmp(self).map(|o| o.reverse())
+            }
+        }
+    )*);
+}
 
 // Case1: forward to builtin operator for same types
 macro_rules! impl_ord_equal_types {
@@ -25,13 +38,13 @@ macro_rules! impl_ord_with_casting {
         impl NumOrd<$small> for $big {
             #[inline]
             fn num_partial_cmp(&self, other: &$small) -> Option<Ordering> {
-                self.partial_cmp(&(*other as $big))
+                self.partial_cmp(&<$big>::from(*other))
             }
         }
         impl NumOrd<$big> for $small {
             #[inline]
             fn num_partial_cmp(&self, other: &$big) -> Option<Ordering> {
-                (*self as $big).partial_cmp(other)
+                <$big>::from(*self).partial_cmp(other)
             }
         }
     )*);
@@ -80,7 +93,7 @@ macro_rules! impl_ord_between_diff_sign {
                 if other < &0 {
                     Some(Ordering::Greater)
                 } else {
-                    self.partial_cmp(&(*other as $unsigned))
+                    self.partial_cmp(&<$unsigned>::try_from(*other).unwrap())
                 }
             }
         }
@@ -90,7 +103,7 @@ macro_rules! impl_ord_between_diff_sign {
                 if self < &0 {
                     Some(Ordering::Less)
                 } else {
-                    (*self as $unsigned).partial_cmp(other)
+                    <$unsigned>::try_from(*self).unwrap().partial_cmp(other)
                 }
             }
         }
@@ -208,3 +221,98 @@ macro_rules! impl_ord_with_size_types {
 
 #[cfg(target_pointer_width = "64")]
 impl_ord_with_size_types!(u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
+
+#[cfg(feature = "num-bigint")]
+mod _num_bigint {
+    use super::*;
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::{FromPrimitive, Signed};
+
+    impl_ord_equal_types!(BigInt BigUint);
+    impl_ord_with_casting! {
+        u8 => BigUint; u16 => BigUint; u32 => BigUint; u64 => BigUint; u128 => BigUint;
+        i8 => BigInt; i16 => BigInt; i32 => BigInt; i64 => BigInt; i128 => BigInt;
+        u8 => BigInt; u16 => BigInt; u32 => BigInt; u64 => BigInt; u128 => BigInt;
+    }
+    impl_ord_between_diff_sign! {
+        i8 => BigUint; i16 => BigUint; i32 => BigUint; i64 => BigUint; i128 => BigUint;
+    }
+    impl_ord_with_size_types!(BigInt BigUint);
+
+    // specialized implementations
+    impl NumOrd<f32> for BigUint {
+        #[inline]
+        fn num_partial_cmp(&self, other: &f32) -> Option<Ordering> {
+            if other.is_nan() {
+                None
+            } else if other < &0. {
+                Some(Ordering::Greater)
+            } else if other.is_infinite() && other.is_sign_positive() {
+                Some(Ordering::Less)
+            } else {
+                let trunc = other.trunc();
+                (self, &trunc).partial_cmp(&(&BigUint::from_f32(trunc).unwrap(), other))
+            }
+        }
+    }
+    impl NumOrd<f64> for BigUint {
+        #[inline]
+        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            if other.is_nan() {
+                None
+            } else if other < &0. {
+                Some(Ordering::Greater)
+            } else if other.is_infinite() && other.is_sign_positive() {
+                Some(Ordering::Less)
+            } else {
+                let trunc = other.trunc();
+                (self, &trunc).partial_cmp(&(&BigUint::from_f64(trunc).unwrap(), other))
+            }
+        }
+    }
+    impl NumOrd<f32> for BigInt {
+        #[inline]
+        fn num_partial_cmp(&self, other: &f32) -> Option<Ordering> {
+            if other.is_nan() {
+                None
+            } else if other.is_infinite() {
+                if other.is_sign_positive() {
+                    Some(Ordering::Less)
+                } else {
+                    Some(Ordering::Greater)
+                }
+            } else {
+                let trunc = other.trunc();
+                (self, &trunc).partial_cmp(&(&BigInt::from_f32(trunc).unwrap(), other))
+            }
+        }
+    }
+    impl NumOrd<f64> for BigInt {
+        #[inline]
+        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            if other.is_nan() {
+                None
+            } else if other.is_infinite() {
+                if other.is_sign_positive() {
+                    Some(Ordering::Less)
+                } else {
+                    Some(Ordering::Greater)
+                }
+            } else {
+                let trunc = other.trunc();
+                (self, &trunc).partial_cmp(&(&BigInt::from_f64(trunc).unwrap(), other))
+            }
+        }
+    }
+    impl NumOrd<BigInt> for BigUint {
+        #[inline]
+        fn num_partial_cmp(&self, other: &BigInt) -> Option<Ordering> {
+            if other.is_negative() {
+                Some(Ordering::Greater)
+            } else {
+                self.partial_cmp(other.magnitude())
+            }
+        }
+    }
+    impl_by_swap!{ f32|BigInt; f32|BigUint; f64|BigInt; f64|BigUint; BigInt|BigUint; }
+}

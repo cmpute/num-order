@@ -4,12 +4,19 @@ use std::fmt;
 use std::vec::Vec;
 use std::cmp::Ordering::{self, *};
 
+#[cfg(feature = "num-bigint")]
+use num_bigint::{BigInt, BigUint};
+
 #[derive(Clone, Debug)]
 #[allow(non_camel_case_types)]
 enum N {
     u8(u8), u16(u16), u32(u32), u64(u64), u128(u128), usize(usize),
     i8(i8), i16(i16), i32(i32), i64(i64), i128(i128), isize(isize),
     f32(f32), f64(f64),
+    #[cfg(feature = "num-bigint")]
+    biguint(BigUint),
+    #[cfg(feature = "num-bigint")]
+    bigint(BigInt),
 }
 
 macro_rules! repeat_arms {
@@ -20,6 +27,10 @@ macro_rules! repeat_arms {
             N::i8($v) => $arm, N::i16($v) => $arm, N::i32($v) => $arm,
             N::i64($v) => $arm, N::i128($v) => $arm, N::isize($v) => $arm,
             N::f32($v) => $arm, N::f64($v) => $arm,
+            #[cfg(feature = "num-bigint")]
+            N::biguint($v) => $arm,
+            #[cfg(feature = "num-bigint")]
+            N::bigint($v) => $arm,
         }
     };
 }
@@ -42,6 +53,7 @@ const F32_SUBNORMAL_MIN: f32 = 1.4e-45;
 const F64_SUBNORMAL_MIN: f64 = 4.9e-324;
 
 // list of selected numbers ordered ascendingly
+// some numbers will be removed to reduce test time if extra feature is enabled
 const NUMBERS: &'static [&'static [N]] = &[
     // f64 min boundary and infinity
     n!(f64::NEG_INFINITY; f32, f64),
@@ -119,21 +131,35 @@ const NUMBERS: &'static [&'static [N]] = &[
     n!(-0x7f_fffe; i32, f32),
 
     // i16 min boundary
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x8002; i32, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x8001 as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x8001; i32, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x8000 as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x8000; i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x7fff as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x7fff; i16, f32),
 
     // i8 min boundary
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x82; i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x81 as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x81; i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x80 as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x80; i8, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x7f as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(-0x7f; i8, f32),
 
     // around zero
@@ -174,30 +200,51 @@ const NUMBERS: &'static [&'static [N]] = &[
     n!(2; u8, i8, f32),
 
     // i8 max boundary
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7e; u8, i8, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7f as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7f; u8, i8, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7f as f32 + 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x80; u8, i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x80 as f32 + 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x81; u8, i16, f32),
 
     // u8 max boundary
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0xfe; u8, i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0xff as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0xff; u8, i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0xff as f32 + 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x100; u16, i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x100 as f32 + 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x101; u16, i16, f32),
 
     // i16 max boundary
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7ffe; u16, i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7fff as f32 - 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7fff; u16, i16, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x7fff as f32 + 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x8000; u16, i32, f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x8000 as f32 + 0.5; f32),
+    #[cfg(not(any(feature = "num-bigint")))]
     n!(0x8001; u16, i32, f32),
 
     // u16 max boundary
@@ -312,34 +359,37 @@ fn expand_equiv_class(cls: &[N]) -> Vec<N> {
         // size extension
         match e {
             N::u8(v) => ret.extend_from_slice(&[N::u8(*v), N::u16(*v as u16), N::u32(*v as u32),
-                                                N::u64(*v as u64)]),
-            N::u16(v) => ret.extend_from_slice(&[N::u16(*v), N::u32(*v as u32), N::u64(*v as u64)]),
-            N::u32(v) => ret.extend_from_slice(&[N::u32(*v), N::u64(*v as u64)]),
-            N::u64(v) => ret.push(N::u64(*v)),
+                N::u64(*v as u64), N::u128(*v as u128)]),
+            N::u16(v) => ret.extend_from_slice(&[N::u16(*v), N::u32(*v as u32), N::u64(*v as u64), N::u128(*v as u128)]),
+            N::u32(v) => ret.extend_from_slice(&[N::u32(*v), N::u64(*v as u64), N::u128(*v as u128)]),
+            N::u64(v) => ret.extend_from_slice(&[N::u64(*v), N::u128(*v as u128)]),
+            N::u128(v) => ret.push(N::u128(*v)),
             N::usize(v) => ret.push(N::usize(*v)),
             N::i8(v) => ret.extend_from_slice(&[N::i8(*v), N::i16(*v as i16), N::i32(*v as i32),
-                                                N::i64(*v as i64)]),
-            N::i16(v) => ret.extend_from_slice(&[N::i16(*v), N::i32(*v as i32), N::i64(*v as i64)]),
-            N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::i64(*v as i64)]),
-            N::i64(v) => ret.push(N::i64(*v)),
+                N::i64(*v as i64), N::i128(*v as i128)]),
+            N::i16(v) => ret.extend_from_slice(&[N::i16(*v), N::i32(*v as i32), N::i64(*v as i64), N::i128(*v as i128)]),
+            N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::i64(*v as i64), N::i128(*v as i128)]),
+            N::i64(v) => ret.extend_from_slice(&[N::i64(*v), N::i128(*v as i128)]),
+            N::i128(v) => ret.push(N::i128(*v)),
             N::isize(v) => ret.push(N::isize(*v)),
             N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::f64(*v as f64)]),
             N::f64(v) => ret.push(N::f64(*v)),
             _ => {}
         }
 
-        // size extension for i128
+        // size extension for bigints
+        #[cfg(feature = "num-bigint")]
         match e {
-            N::u8(v) => ret.push(N::u128(*v as u128)),
-            N::u16(v) => ret.push(N::u128(*v as u128)),
-            N::u32(v) => ret.push(N::u128(*v as u128)),
-            N::u64(v) => ret.push(N::u128(*v as u128)),
-            N::u128(v) => ret.push(N::u128(*v)),
-            N::i8(v) => ret.push(N::i128(*v as i128)),
-            N::i16(v) => ret.push(N::i128(*v as i128)),
-            N::i32(v) => ret.push(N::i128(*v as i128)),
-            N::i64(v) => ret.push(N::i128(*v as i128)),
-            N::i128(v) => ret.push(N::i128(*v)),
+            N::u8(v) => ret.push(N::biguint(BigUint::from(*v))),
+            N::u16(v) => ret.push(N::biguint(BigUint::from(*v))),
+            N::u32(v) => ret.push(N::biguint(BigUint::from(*v))),
+            N::u64(v) => ret.push(N::biguint(BigUint::from(*v))),
+            N::u128(v) => ret.push(N::biguint(BigUint::from(*v))),
+            N::i8(v) => ret.push(N::bigint(BigInt::from(*v))),
+            N::i16(v) => ret.push(N::bigint(BigInt::from(*v))),
+            N::i32(v) => ret.push(N::bigint(BigInt::from(*v))),
+            N::i64(v) => ret.push(N::bigint(BigInt::from(*v))),
+            N::i128(v) => ret.push(N::bigint(BigInt::from(*v))),
             _ => {}
         }
 
