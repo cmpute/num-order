@@ -27,7 +27,7 @@
 //! ```
 //! 
 //! This crate can serve applications where [float-ord](https://crates.io/crates/float-ord),
-//! [num-cmp](https://crates.io/crates/num-cmp), [numcmp](https://crates.io/crates/numcmp) are used.
+//! [num-cmp](https://crates.io/crates/num-cmp), [num-ord](https://crates.io/crates/num-ord) are used.
 //! Meanwhile it also supports hashing and more numeric types (`num-bigint`, etc.).
 //! 
 //! # Optional Features

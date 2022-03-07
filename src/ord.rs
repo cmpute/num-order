@@ -3,12 +3,13 @@ use core::convert::TryFrom;
 use core::cmp::Ordering;
 
 // Case0: swap operand, this introduces overhead so only used for non-primitive types
-macro_rules! impl_by_swap {
+#[allow(unused_macros)]
+macro_rules! impl_ord_by_swap {
     ($($t1:ty | $t2:ty;)*) => ($(
         impl NumOrd<$t2> for $t1 {
             #[inline]
             fn num_partial_cmp(&self, other: &$t2) -> Option<Ordering> {
-                other.num_partial_cmp(self).map(|o| o.reverse())
+                other.num_partial_cmp(self).map(Ordering::reverse)
             }
         }
     )*);
@@ -33,7 +34,7 @@ impl_ord_equal_types! {
 }
 
 // Case2: forward to same types by safe casting
-macro_rules! impl_ord_with_casting {
+macro_rules! impl_ord_by_casting {
     ($($small:ty => $big:ty;)*) => ($(
         impl NumOrd<$small> for $big {
             #[inline]
@@ -50,7 +51,7 @@ macro_rules! impl_ord_with_casting {
     )*);
 }
 
-impl_ord_with_casting! {
+impl_ord_by_casting! {
     // uN, uM for N < M
     u8  => u128; u8  => u64; u8  => u32; u8 => u16;
     u16 => u128; u16 => u64; u16 => u32;
@@ -219,9 +220,9 @@ macro_rules! impl_ord_with_size_types {
     )*);
 }
 
-#[cfg(target_pointer_width = "64")]
 impl_ord_with_size_types!(u8 u16 u32 u64 u128 i8 i16 i32 i64 i128 f32 f64);
 
+// Case6: separate handling for special types
 #[cfg(feature = "num-bigint")]
 mod _num_bigint {
     use super::*;
@@ -229,7 +230,7 @@ mod _num_bigint {
     use num_traits::{FromPrimitive, Signed};
 
     impl_ord_equal_types!(BigInt BigUint);
-    impl_ord_with_casting! {
+    impl_ord_by_casting! {
         u8 => BigUint; u16 => BigUint; u32 => BigUint; u64 => BigUint; u128 => BigUint;
         i8 => BigInt; i16 => BigInt; i32 => BigInt; i64 => BigInt; i128 => BigInt;
         u8 => BigInt; u16 => BigInt; u32 => BigInt; u64 => BigInt; u128 => BigInt;
@@ -314,5 +315,206 @@ mod _num_bigint {
             }
         }
     }
-    impl_by_swap!{ f32|BigInt; f32|BigUint; f64|BigInt; f64|BigUint; BigInt|BigUint; }
+    impl_ord_by_swap!{ f32|BigInt; f32|BigUint; f64|BigInt; f64|BigUint; BigInt|BigUint; }
+}
+
+// FIXME: Implementations for templated values are directly specialized, because there is no
+// negative impl or specialization support yet in rust. We could have a generalized way to implement
+// the comparsion if the specialization is supported.
+
+#[cfg(feature = "num-rational")]
+mod _num_rational {
+    use super::*;
+    use num_rational::Ratio;
+    use num_traits::{float::FloatCore, Signed};
+
+    // For example, the following types could be covered by a generic impl.
+    impl_ord_equal_types!(Ratio<i8> Ratio<i16> Ratio<i32> Ratio<i64> Ratio<i128> Ratio<isize>);
+
+    macro_rules! impl_ratio_ord_with_int {
+        ($($t:ty)*) => ($(
+            impl NumOrd<Ratio<$t>> for $t {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<$t>) -> Option<Ordering> {
+                    (self * other.denom()).partial_cmp(other.numer())
+                }
+            }
+            impl NumOrd<$t> for Ratio<$t> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                    self.numer().partial_cmp(&(*other * self.denom()))
+                }
+            }
+        )*);
+    }
+    impl_ratio_ord_with_int!(i8 i16 i32 i64 i128);
+
+    macro_rules! impl_ratio_ord_by_casting {
+        ($($small:ty => $big:ty;)*) => ($(
+            // between ratios
+            impl NumOrd<Ratio<$small>> for Ratio<$big> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<$small>) -> Option<Ordering> {
+                    let rhs_num = *other.numer() as $big;
+                    let rhs_den = *other.denom() as $big;
+                    let ord = (self.numer() * rhs_den).num_partial_cmp(&(rhs_num * self.denom()));
+                    if self.denom() * rhs_den > 0 {
+                        ord
+                    } else {
+                        ord.map(Ordering::reverse)
+                    }
+                }
+            }
+            impl NumOrd<Ratio<$big>> for Ratio<$small> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<$big>) -> Option<Ordering> {
+                    let lhs_num = *self.numer() as $big;
+                    let lhs_den = *self.denom() as $big;
+                    let ord = (lhs_num * other.denom()).num_partial_cmp(&(other.numer() * lhs_den));
+                    if lhs_den * other.denom() > 0 {
+                        ord
+                    } else {
+                        ord.map(Ordering::reverse)
+                    }
+                }
+            }
+
+            // between ratio and ints
+            impl NumOrd<$small> for Ratio<$big> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$small) -> Option<Ordering> {
+                    self.numer().partial_cmp(&(*other as $big * self.denom()))
+                }
+            }
+            impl NumOrd<Ratio<$big>> for $small {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<$big>) -> Option<Ordering> {
+                    (*self as $big * other.denom()).partial_cmp(other.numer())
+                }
+            }
+            impl NumOrd<$big> for Ratio<$small> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$big) -> Option<Ordering> {
+                    (*self.numer() as $big).partial_cmp(&(other * *self.denom() as $big))
+                }
+            }
+            impl NumOrd<Ratio<$small>> for $big {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<$small>) -> Option<Ordering> {
+                    (self * *other.denom() as $big).partial_cmp(&(*other.numer() as $big))
+                }
+            }
+        )*);
+    }
+    impl_ratio_ord_by_casting! {
+        i8  => i128; i8  => i64; i8  => i32; i8 => i16;
+        i16 => i128; i16 => i64; i16 => i32;
+        i32 => i128; i32 => i64;
+        i64 => i128;
+    }
+
+    // special handling for f64 against i64
+    impl NumOrd<f64> for Ratio<i64> {
+        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            if other.is_nan() {
+                return None
+            }
+            
+            // other = sign * man * 2^exp
+            let (man, exp, sign) = other.integer_decode();
+            let reverse = match (self.is_positive(), sign > 0) {
+                (true, false) => return Some(Ordering::Greater),
+                (false, true) => return Some(Ordering::Less),
+                (true, true) => false,
+                (false, false) => true,
+            };
+
+            // self = a / b
+            let a = self.numer().abs() as u64;
+            let b = self.denom().abs() as u64;
+
+            let result = if exp >= 0 {
+                // f / r = (man * 2^exp * b) / a if exp >= 0
+                if let Some(num) = man.checked_mul(b).and_then(|v| v.checked_shl(exp as u32)) {
+                    num.partial_cmp(&a).unwrap()
+                } else {
+                    Ordering::Greater
+                }
+            } else {
+                // f / r = (man * b) / (a * 2^(-exp)) if exp < 0
+                let num = (man as u128).checked_mul(b as u128).unwrap();
+                if let Some(den) = (a as u128).checked_shl((-exp) as u32) {
+                    num.partial_cmp(&den).unwrap()
+                } else {
+                    Ordering::Less
+                }
+            };
+
+            if reverse {
+                Some(result.reverse())
+            } else {
+                Some(result)
+            }
+        }
+    }
+    impl_ord_by_swap!(f64|Ratio<i64>;);
+
+    // cast to f64 and i64 for comparison
+    macro_rules! impl_ratio_ord_with_floats_by_casting {
+        ($($float:ty => $bfloat:ty | $int:ty => $bint:ty;)*) => ($(
+            impl NumOrd<$float> for Ratio<$int> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$float) -> Option<Ordering> {
+                    let bratio = Ratio::<$bint>::new(*self.numer() as $bint, *self.denom() as $bint);
+                    bratio.num_partial_cmp(&(*other as $bfloat))
+                }
+            }
+            impl NumOrd<Ratio<$int>> for $float {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<$int>) -> Option<Ordering> {
+                    let bratio = Ratio::<$bint>::new(*other.numer() as $bint, *other.denom() as $bint);
+                    (*self as $bfloat).num_partial_cmp(&bratio)
+                }
+            }
+        )*);
+    }
+    impl_ratio_ord_with_floats_by_casting! {
+        f32 => f64|i8 => i64; f32 => f64|i16 => i64; f32 => f64|i32 => i64; f32 => f64|i64 => i64;
+        f64 => f64|i8 => i64; f64 => f64|i16 => i64; f64 => f64|i32 => i64;
+    }
+    // FIXME: comparing Ratio<i128> against floats is not supported yet since we need double width multiplication.
+
+    // deal with size types
+    macro_rules! impl_ratio_ord_with_size_types {
+        ($($t:ty)*) => ($(
+            impl NumOrd<$t> for Ratio<isize> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                    #[cfg(target_pointer_width = "32")]
+                    let r = Ratio::<i32>::new(*self.numer() as i32, *self.denom() as i32);
+                    #[cfg(target_pointer_width = "64")]
+                    let r = Ratio::<i64>::new(*self.numer() as i64, *self.denom() as i64);
+
+                    r.num_partial_cmp(other)
+                }
+            }
+            impl NumOrd<Ratio<isize>> for $t {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Ratio<isize>) -> Option<Ordering> {
+                    #[cfg(target_pointer_width = "32")]
+                    let r = Ratio::<i32>::new(*other.numer() as i32, *other.denom() as i32);
+                    #[cfg(target_pointer_width = "64")]
+                    let r = Ratio::<i64>::new(*other.numer() as i64, *other.denom() as i64);
+
+                    self.num_partial_cmp(&r)
+                }
+            }
+        )*);
+    }
+    impl_ratio_ord_with_size_types!(i8 i16 i32 i64 i128 f32 f64);
+}
+
+#[cfg(feature = "num-complex")]
+mod _num_complex {
+
 }

@@ -8,7 +8,6 @@ use num_modular::ModularCoreOps;
 use num_traits::Float;
 use core::hash::{Hash, Hasher};
 
-const P64: u64 = 0xFFFFFFFFFFFFFFC5; // largest prime under 2^64
 const M61: i64 = 0x1FFFFFFFFFFFFFFF; // largest mersenne prime under 2^64
 const HASH_INF: i64 = i64::MAX;
 
@@ -64,6 +63,24 @@ impl NumHash for i128 {
     }
 }
 
+#[cfg(feature = "num-bigint")]
+mod _num_bigint {
+    use super::*;
+    use num_bigint::{BigInt, BigUint};
+    use num_traits::ToPrimitive;
+
+    impl NumHash for BigUint {
+        fn num_hash<H: Hasher>(&self, state: &mut H) {
+            (self % BigUint::from(M61 as u64)).to_i64().unwrap().hash(state)
+        }
+    }
+    impl NumHash for BigInt {
+        fn num_hash<H: Hasher>(&self, state: &mut H) {
+            (self % BigInt::from(M61)).to_i64().unwrap().hash(state)
+        }
+    }
+}
+
 // Case3: for rational(a, b), the hash is `hash(a * b^-1 mod M61)`
 macro_rules! impl_hash_for_float {
     ($($float:ty)*) => ($(
@@ -90,22 +107,8 @@ macro_rules! impl_hash_for_float {
 }
 impl_hash_for_float! { f32 f64 }
 
-#[cfg(feature = "num-bigint")]
-mod _num_bigint {
-    use super::*;
-    use num_bigint::{BigInt, BigUint};
-    use num_traits::ToPrimitive;
+// Case4: for a + b*sqrt(r), the hash is `hash(a)` and `hash(b^2*r)`
+#[cfg(feature = "num-complex")]
+mod _num_complex {
 
-    impl NumHash for BigUint {
-        fn num_hash<H: Hasher>(&self, state: &mut H) {
-            (self % BigUint::from(M61 as u64)).to_i64().unwrap().hash(state)
-        }
-    }
-    impl NumHash for BigInt {
-        fn num_hash<H: Hasher>(&self, state: &mut H) {
-            (self % BigInt::from(M61)).to_i64().unwrap().hash(state)
-        }
-    }
 }
-
-// Case4: for a + b*sqrt(r), the hash is `hash(a + P64*b^2*r)`
