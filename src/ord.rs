@@ -330,7 +330,7 @@ mod _num_bigint {
 mod _num_rational {
     use super::*;
     use num_rational::Ratio;
-    use num_traits::{float::FloatCore, Signed};
+    use num_traits::{float::FloatCore, Signed, Zero};
 
     impl_ord_equal_types!(
         Ratio<i8> Ratio<i16> Ratio<i32> Ratio<i64> Ratio<i128> Ratio<isize>
@@ -515,8 +515,23 @@ mod _num_rational {
     // We can implement it efficiently with carrying_mul implemented (rust#85532)
     impl NumOrd<f64> for Ratio<u64> {
         fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            // shortcut for comparing zeros
+            if self.is_zero() {
+                return 0f64.partial_cmp(other)
+            }
+            if other.is_zero() {
+                return self.numer().partial_cmp(&0)
+            }
+            
+            // shortcut for nan and inf
             if other.is_nan() {
                 return None
+            } else if other.is_infinite() {
+                if other.is_sign_positive() {
+                    return Some(Ordering::Less)
+                } else { // negative
+                    return Some(Ordering::Greater)
+                }
             }
             
             // other = sign * man * 2^exp
@@ -530,19 +545,19 @@ mod _num_rational {
             let b = *self.denom();
 
             let result = if exp >= 0 {
-                // f / r = (man * 2^exp * b) / a if exp >= 0
-                if let Some(num) = man.checked_mul(b).and_then(|v| v.checked_shl(exp as u32)) {
-                    num.partial_cmp(&a).unwrap()
-                } else {
-                    Ordering::Greater
-                }
-            } else {
-                // f / r = (man * b) / (a * 2^(-exp)) if exp < 0
-                let num = (man as u128).checked_mul(b as u128).unwrap();
-                if let Some(den) = (a as u128).checked_shl((-exp) as u32) {
-                    num.partial_cmp(&den).unwrap()
+                // r / f = a / (man * 2^exp * b) if exp >= 0
+                if let Some(num) = || -> Option<_> { 1u64.checked_shl(exp as u32)?.checked_mul(man) }() {
+                    a.partial_cmp(&num).unwrap()
                 } else {
                     Ordering::Less
+                }
+            } else {
+                // r / f = (a * 2^(-exp)) / (man * b) if exp < 0
+                let den = man as u128 * b as u128;
+                if let Some(num) = || -> Option<_> { 1u128.checked_shl((-exp) as u32)?.checked_mul(a as u128) } () {
+                    num.partial_cmp(&den).unwrap()
+                } else {
+                    Ordering::Greater
                 }
             };
             Some(result)
@@ -550,37 +565,52 @@ mod _num_rational {
     }
     impl NumOrd<f64> for Ratio<i64> {
         fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            // shortcut for comparing zeros
+            if self.is_zero() {
+                return 0f64.partial_cmp(other)
+            }
+            if other.is_zero() {
+                return self.numer().partial_cmp(&0)
+            }
+
+            // shortcut for nan and inf
             if other.is_nan() {
                 return None
+            } else if other.is_infinite() {
+                if other.is_sign_positive() {
+                    return Some(Ordering::Less)
+                } else { // negative
+                    return Some(Ordering::Greater)
+                }
             }
             
             // other = sign * man * 2^exp
             let (man, exp, sign) = other.integer_decode();
-            let reverse = match (self.is_positive(), sign > 0) {
+            let reverse = match (!self.is_negative(), sign >= 0) {
                 (true, false) => return Some(Ordering::Greater),
                 (false, true) => return Some(Ordering::Less),
                 (true, true) => false,
                 (false, false) => true,
             };
 
-            // self = a / b
-            let a = self.numer().abs() as u64;
-            let b = self.denom().abs() as u64;
+            // self = a / b, using safe absolute operation
+            let a = if self.numer() < &0 { (*self.numer() as u64).wrapping_neg() } else { *self.numer() as u64 };
+            let b = if self.denom() < &0 { (*self.denom() as u64).wrapping_neg() } else { *self.denom() as u64 };
 
             let result = if exp >= 0 {
-                // f / r = (man * 2^exp * b) / a if exp >= 0
-                if let Some(num) = man.checked_mul(b).and_then(|v| v.checked_shl(exp as u32)) {
-                    num.partial_cmp(&a).unwrap()
-                } else {
-                    Ordering::Greater
-                }
-            } else {
-                // f / r = (man * b) / (a * 2^(-exp)) if exp < 0
-                let num = (man as u128).checked_mul(b as u128).unwrap();
-                if let Some(den) = (a as u128).checked_shl((-exp) as u32) {
-                    num.partial_cmp(&den).unwrap()
+                // r / f = a / (man * 2^exp * b) if exp >= 0
+                if let Some(num) = || -> Option<_> { 1u64.checked_shl(exp as u32)?.checked_mul(man) }() {
+                    a.partial_cmp(&num).unwrap()
                 } else {
                     Ordering::Less
+                }
+            } else {
+                // r / f = (a * 2^(-exp)) / (man * b) if exp < 0
+                let den = man as u128 * b as u128;
+                if let Some(num) = || -> Option<_> { 1u128.checked_shl((-exp) as u32)?.checked_mul(a as u128) } () {
+                    num.partial_cmp(&den).unwrap()
+                } else {
+                    Ordering::Greater
                 }
             };
 
