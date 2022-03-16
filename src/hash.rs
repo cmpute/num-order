@@ -9,7 +9,7 @@ use num_traits::Float;
 use core::hash::{Hash, Hasher};
 
 const P64: u64 = 0xFFFFFFFFFFFFFFC5; // largest prime under 2^64
-const M61: i64 = 0x1FFFFFFFFFFFFFFF; // largest mersenne prime under 2^64
+const M61: i64 = 0x1FFFFFFFFFFFFFFF; // largest mersenne prime under 2^63
 const HASH_INF: i64 = i64::MAX;
 
 // Case1: directly hash the i64 and u64 number
@@ -121,12 +121,19 @@ mod _num_rational {
             impl NumHash for Ratio<$int> {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
                     let ub = *self.denom() as u64;
-                    let binv = if ub != M61 as u64 {
+                    let binv = if ub % M61 as u64 != 0 {
                         ModularOps::<&u64>::invm(&ub, &(M61 as u64)).unwrap()
                     } else {
                         HASH_INF as u64 // no modular inverse, use INF as the result
                     };
-                    (self.numer() * (binv as $int)).hash(state);
+
+                    let ua = if self.numer() < &0 { (*self.numer() as u64).wrapping_neg() } else { *self.numer() as u64 };
+                    let ab = (ua % M61 as u64).mulm(binv, &(M61 as u64));
+                    if self.numer() >= &0 {
+                        (ab as i64).hash(state)
+                    } else {
+                        (ab as i64).neg().hash(state)
+                    }
                 }
             }
         )*);
@@ -142,7 +149,8 @@ mod _num_rational {
             } else {
                 HASH_INF as u64 // no modular inverse, use INF as the result
             };
-            let ua = (self.numer().abs() % M61 as i128) as u64;
+            let ua = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 };
+            let ua = (ua % M61 as u128) as u64;
             let ab = ua.mulm(&binv, &(M61 as u64));
             if self.numer() >= &0 {
                 (ab as i64).hash(state)

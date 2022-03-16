@@ -361,27 +361,15 @@ mod _num_rational {
             impl NumOrd<Ratio<$small>> for Ratio<$big> {
                 #[inline]
                 fn num_partial_cmp(&self, other: &Ratio<$small>) -> Option<Ordering> {
-                    let rhs_num = *other.numer() as $big;
-                    let rhs_den = *other.denom() as $big;
-                    let ord = (self.numer() * rhs_den).num_partial_cmp(&(rhs_num * self.denom()));
-                    if self.denom() * rhs_den > 0 {
-                        ord
-                    } else {
-                        ord.map(Ordering::reverse)
-                    }
+                    let r = Ratio::new(*other.numer() as $big, *other.denom() as $big);
+                    self.partial_cmp(&r)
                 }
             }
             impl NumOrd<Ratio<$big>> for Ratio<$small> {
                 #[inline]
                 fn num_partial_cmp(&self, other: &Ratio<$big>) -> Option<Ordering> {
-                    let lhs_num = *self.numer() as $big;
-                    let lhs_den = *self.denom() as $big;
-                    let ord = (lhs_num * other.denom()).num_partial_cmp(&(other.numer() * lhs_den));
-                    if lhs_den * other.denom() > 0 {
-                        ord
-                    } else {
-                        ord.map(Ordering::reverse)
-                    }
+                    let r = Ratio::new(*self.numer() as $big, *self.denom() as $big);
+                    r.partial_cmp(other)
                 }
             }
 
@@ -389,25 +377,41 @@ mod _num_rational {
             impl NumOrd<$small> for Ratio<$big> {
                 #[inline]
                 fn num_partial_cmp(&self, other: &$small) -> Option<Ordering> {
-                    self.numer().partial_cmp(&(*other as $big * self.denom()))
+                    if let Some(prod) = self.denom().checked_mul(*other as $big) {
+                        self.numer().partial_cmp(&prod)
+                    } else {
+                        Some(Ordering::Less)
+                    }
                 }
             }
             impl NumOrd<Ratio<$big>> for $small {
                 #[inline]
                 fn num_partial_cmp(&self, other: &Ratio<$big>) -> Option<Ordering> {
-                    (*self as $big * other.denom()).partial_cmp(other.numer())
+                    if let Some(prod) = other.denom().checked_mul(*self as $big) {
+                        prod.partial_cmp(other.numer())
+                    } else {
+                        Some(Ordering::Greater)
+                    }
                 }
             }
             impl NumOrd<$big> for Ratio<$small> {
                 #[inline]
                 fn num_partial_cmp(&self, other: &$big) -> Option<Ordering> {
-                    (*self.numer() as $big).partial_cmp(&(other * *self.denom() as $big))
+                    if let Some(prod) = other.checked_mul(*self.denom() as $big) {
+                        (*self.numer() as $big).partial_cmp(&prod)    
+                    } else {
+                        Some(Ordering::Less)
+                    }
                 }
             }
             impl NumOrd<Ratio<$small>> for $big {
                 #[inline]
                 fn num_partial_cmp(&self, other: &Ratio<$small>) -> Option<Ordering> {
-                    (self * *other.denom() as $big).partial_cmp(&(*other.numer() as $big))
+                    if let Some(prod) = self.checked_mul(*other.denom() as $big) {
+                        prod.partial_cmp(&(*other.numer() as $big))
+                    } else {
+                        Some(Ordering::Greater)
+                    }
                 }
             }
         )*);

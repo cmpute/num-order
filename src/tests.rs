@@ -2,6 +2,7 @@ use super::*;
 use std::hash::{Hash, Hasher};
 use std::fmt;
 use std::vec::Vec;
+use std::collections::hash_map::DefaultHasher;
 use std::cmp::Ordering::{self, *};
 
 #[cfg(feature = "num-bigint")]
@@ -490,6 +491,12 @@ fn assert_cmp<T: Into<Option<Ordering>>>(lhs: &N, rhs: &N, expected: T) {
         lhs, rhs);
 }
 
+fn hash(num: &N) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    num.hash(&mut hasher);
+    hasher.finish()
+}
+
 #[test]
 fn test_ordering() {
     let numbers: Vec<_> = NUMBERS.iter().map(|cls| expand_equiv_class(cls)).collect();
@@ -531,14 +538,6 @@ fn test_nan() {
 
 #[test]
 fn test_hash() {
-    use std::collections::hash_map::DefaultHasher;
-    
-    fn hash(num: &N) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        num.hash(&mut hasher);
-        hasher.finish()
-    }
-
     for &equiv in NUMBERS {
         let hashes: Vec<u64> = equiv.iter().map(|n| hash(n)).collect();
         for i in 1..equiv.len() {
@@ -547,36 +546,155 @@ fn test_hash() {
     }
 }
 
-
+#[test]
 #[cfg(feature = "num-rational")]
-fn expand_equiv_class_ratio(cls: &[N]) -> Vec<N> {
-    let mut ret = Vec::new();
+fn test_rational_using_prim() {
+    fn expand_equiv_class_ratio(cls: &[N]) -> Vec<N> {
+        let mut ret = Vec::new();
+    
+        for e in cls {
+            // size extension
+            match e {
+                N::u8(v) => ret.push(N::u8(*v)),
+                N::u16(v) => ret.push(N::u16(*v)),
+                N::u32(v) => ret.push(N::u32(*v)),
+                N::u64(v) => ret.push(N::u64(*v)),
+                N::u128(v) => ret.push(N::u128(*v)),
+                N::f64(v) => ret.push(N::f64(*v)),
+                N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::f64(*v as f64)]),
+    
+                N::i8(v) => ret.extend_from_slice(&[N::i8(*v), N::r8(Ratio::from(*v))]),
+                N::i16(v) => ret.extend_from_slice(&[N::i16(*v), N::r16(Ratio::from(*v))]),
+                N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::r32(Ratio::from(*v))]),
+                N::i64(v) => ret.extend_from_slice(&[N::i64(*v), N::r64(Ratio::from(*v))]),
+                N::i128(v) => ret.push(N::i128(*v)),
+                N::isize(v) => ret.extend_from_slice(&[N::isize(*v), N::rsize(Ratio::from(*v))]),
+                _ => {}
+            }
+        }
+        ret
+    }
 
-    for e in cls {
-        // size extension
-        match e {
-            N::u8(v) => ret.push(N::u8(*v)),
-            N::u16(v) => ret.push(N::u16(*v)),
-            N::u32(v) => ret.push(N::u32(*v)),
-            N::u64(v) => ret.push(N::u64(*v)),
-            N::u128(v) => ret.push(N::u128(*v)),
-            N::f64(v) => ret.push(N::f64(*v)),
-            N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::f64(*v as f64)]),
+    let numbers: Vec<_> = NUMBERS.iter().map(|cls| expand_equiv_class_ratio(cls)).collect();
 
-            N::i8(v) => ret.extend_from_slice(&[N::i8(*v), N::r8(Ratio::from(*v))]),
-            N::i16(v) => ret.extend_from_slice(&[N::i16(*v), N::r16(Ratio::from(*v))]),
-            N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::r32(Ratio::from(*v))]),
-            N::i64(v) => ret.extend_from_slice(&[N::i64(*v), N::r64(Ratio::from(*v))]),
-            N::i128(v) => ret.push(N::i128(*v)),
-            N::isize(v) => ret.push(N::rsize(Ratio::from(*v))),
-            _ => {}
+    // comparison between numbers
+    for icls in 0..numbers.len() {
+        for jcls in 0..numbers.len() {
+            let expected = icls.cmp(&jcls);
+            for i in &numbers[icls] {
+                for j in &numbers[jcls] {
+                    assert_cmp(i, j, expected);
+                }
+            }
         }
     }
-    ret
+
+    for &equiv in NUMBERS {
+        let equiv = expand_equiv_class_ratio(equiv);
+        let hashes: Vec<u64> = equiv.iter().map(hash).collect();
+        for i in 1..equiv.len() {
+            assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", equiv[0], equiv[i]);
+        }
+    }
 }
 
 #[test]
 #[cfg(feature = "num-rational")]
 fn test_rational() {
-    use num_rational::Ratio;
+    // additional test cases for rational numbers: (numer, denom, float value)
+    let ratio_coeffs = [
+        (N::i8(-2), N::i8(1), Some(N::f32(-2.))),
+
+        // near -1
+        (N::i32(i32::MIN), N::i32(i32::MAX), None),
+        (N::i64(i64::MIN), N::i64(i64::MAX), None),
+        (N::i8(-1), N::i8(1), Some(N::f32(-1.))),
+        (N::i64(i64::MIN + 2), N::i64(i64::MAX), None),
+        (N::i32(i32::MIN + 2), N::i32(i32::MAX), None),
+
+        // near -0.5
+        (N::i32(-(1 << 22) - 1), N::i32(1 << 23), Some(N::f32(-0.5 - 2f32.powi(-23)))),
+        (N::i64(-(1 << 52) - 1), N::i64(1 << 53), Some(N::f64(-0.5 - 2f64.powi(-53)))),
+        (N::i8(-1), N::i8(2), Some(N::f32(-0.5))),
+        (N::i64(-(1 << 52) + 1), N::i64(1 << 53), Some(N::f64(-0.5 + 2f64.powi(-53)))),
+        (N::i32(-(1 << 22) + 1), N::i32(1 << 23), Some(N::f32(-0.5 + 2f32.powi(-23)))),
+
+        // near 0
+        (N::i32(-1), N::i32(i32::MAX), None),
+        (N::i64(-1), N::i64(i64::MAX), None),
+        (N::i8(0), N::i8(1), Some(N::f32(0.))),
+        (N::i64(1), N::i64(i64::MAX), None),
+        (N::i32(1), N::i32(i32::MAX), None),
+
+        // near 0.5
+        (N::i32((1 << 22) - 1), N::i32(1 << 23), Some(N::f32(0.5 - 2f32.powi(-23)))),
+        (N::i64((1 << 52) - 1), N::i64(1 << 53), Some(N::f64(0.5 - 2f64.powi(-53)))),
+        (N::i8(1), N::i8(2), Some(N::f32(0.5))),
+        (N::i64((1 << 52) + 1), N::i64(1 << 53), Some(N::f64(0.5 + 2f64.powi(-53)))),
+        (N::i32((1 << 22) + 1), N::i32(1 << 23), Some(N::f32(0.5 + 2f32.powi(-23)))),
+
+        // near 1
+        (N::i32(i32::MAX-1), N::i32(i32::MAX), None),
+        (N::i64(i64::MAX-1), N::i64(i64::MAX), None),
+        (N::i8(1), N::i8(1), Some(N::f32(1.))),
+        (N::i64(i64::MAX), N::i64(i64::MAX-1), None),
+        (N::i32(i32::MAX), N::i32(i32::MAX-1), None),
+
+        (N::i8(2), N::i8(1), Some(N::f32(2.))),
+    ];
+
+    fn expand_equiv_class_ratio(num: &N, den: &N) -> Vec<N> {
+        let mut ret = Vec::new();
+
+        match (num, den) {
+            (N::i8(num), N::i8(den)) => ret.extend_from_slice(&[
+                N::r8(Ratio::new(*num, *den)),
+                N::r16(Ratio::new(*num as i16, *den as i16)),
+                N::r32(Ratio::new(*num as i32, *den as i32)),
+                N::r64(Ratio::new(*num as i64, *den as i64))]),
+            (N::i16(num), N::i16(den)) => ret.extend_from_slice(&[
+                N::r16(Ratio::new(*num as i16, *den as i16)),
+                N::r32(Ratio::new(*num as i32, *den as i32)),
+                N::r64(Ratio::new(*num as i64, *den as i64))]),
+            (N::i32(num), N::i32(den)) => ret.extend_from_slice(&[
+                N::r32(Ratio::new(*num as i32, *den as i32)),
+                N::r64(Ratio::new(*num as i64, *den as i64))]),
+            (N::i64(num), N::i64(den)) => ret.extend_from_slice(&[
+                N::r64(Ratio::new(*num as i64, *den as i64))]),
+            (_, _) => unreachable!()
+        };
+        ret
+    }
+
+    // test comparison and hashing
+    for icls in 0..ratio_coeffs.len() {
+        let (inum, iden, ifloat) = &ratio_coeffs[icls];
+        let iequiv = expand_equiv_class_ratio(inum, iden);
+
+        // test hashing
+        let hashes: Vec<u64> = iequiv.iter().map(hash).collect();
+        for i in 1..iequiv.len() {
+            assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", iequiv[0], iequiv[i]);
+        }
+        
+        // test comparison with float
+        if let Some(f) = ifloat {
+            for i in &iequiv {
+                assert_cmp(i, f, Ordering::Equal);
+                assert_eq!(hash(i), hash(f));
+            }
+        }
+
+        for jcls in 0..ratio_coeffs.len() {
+            let (jnum, jden, _) = &ratio_coeffs[jcls];
+            let jequiv = expand_equiv_class_ratio(jnum, jden);
+
+            let expected = icls.cmp(&jcls);
+            for i in &iequiv {
+                for j in &jequiv {
+                    assert_cmp(i, j, expected);
+                }
+            }
+        }
+    }
 }
