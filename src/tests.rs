@@ -6,6 +6,8 @@ use std::cmp::Ordering::{self, *};
 
 #[cfg(feature = "num-bigint")]
 use num_bigint::{BigInt, BigUint};
+#[cfg(feature = "num-rational")]
+use num_rational::Ratio;
 
 #[derive(Clone, Debug)]
 #[allow(non_camel_case_types)]
@@ -17,6 +19,16 @@ enum N {
     biguint(BigUint),
     #[cfg(feature = "num-bigint")]
     bigint(BigInt),
+    #[cfg(feature = "num-rational")]
+    r8(Ratio<i8>),
+    #[cfg(feature = "num-rational")]
+    r16(Ratio<i16>),
+    #[cfg(feature = "num-rational")]
+    r32(Ratio<i32>),
+    #[cfg(feature = "num-rational")]
+    r64(Ratio<i64>),
+    #[cfg(feature = "num-rational")]
+    rsize(Ratio<isize>),
 }
 
 macro_rules! repeat_arms {
@@ -31,6 +43,16 @@ macro_rules! repeat_arms {
             N::biguint($v) => $arm,
             #[cfg(feature = "num-bigint")]
             N::bigint($v) => $arm,
+            #[cfg(feature = "num-rational")]
+            N::r8($v) => $arm,
+            #[cfg(feature = "num-rational")]
+            N::r16($v) => $arm,
+            #[cfg(feature = "num-rational")]
+            N::r32($v) => $arm,
+            #[cfg(feature = "num-rational")]
+            N::r64($v) => $arm,
+            #[cfg(feature = "num-rational")]
+            N::rsize($v) => $arm,
         }
     };
 }
@@ -394,25 +416,16 @@ fn expand_equiv_class(cls: &[N]) -> Vec<N> {
         }
 
         // insert equivalent usize/isize
-        #[cfg(target_pointer_width = "32")]
         match e {
             N::u8(v) => ret.push(N::usize(*v as usize)),
             N::u16(v) => ret.push(N::usize(*v as usize)),
             N::u32(v) => ret.push(N::usize(*v as usize)),
-            N::i8(v) => ret.push(N::isize(*v as isize)),
-            N::i16(v) => ret.push(N::isize(*v as isize)),
-            N::i32(v) => ret.push(N::isize(*v as isize)),
-            _ => {}
-        }
-        #[cfg(target_pointer_width = "64")]
-        match e {
-            N::u8(v) => ret.push(N::usize(*v as usize)),
-            N::u16(v) => ret.push(N::usize(*v as usize)),
-            N::u32(v) => ret.push(N::usize(*v as usize)),
+            #[cfg(target_pointer_width = "64")]
             N::u64(v) => ret.push(N::usize(*v as usize)),
             N::i8(v) => ret.push(N::isize(*v as isize)),
             N::i16(v) => ret.push(N::isize(*v as isize)),
             N::i32(v) => ret.push(N::isize(*v as isize)),
+            #[cfg(target_pointer_width = "64")]
             N::i64(v) => ret.push(N::isize(*v as isize)),
             _ => {}
         }
@@ -532,4 +545,38 @@ fn test_hash() {
             assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", equiv[0], equiv[i]);
         }
     }
+}
+
+
+#[cfg(feature = "num-rational")]
+fn expand_equiv_class_ratio(cls: &[N]) -> Vec<N> {
+    let mut ret = Vec::new();
+
+    for e in cls {
+        // size extension
+        match e {
+            N::u8(v) => ret.push(N::u8(*v)),
+            N::u16(v) => ret.push(N::u16(*v)),
+            N::u32(v) => ret.push(N::u32(*v)),
+            N::u64(v) => ret.push(N::u64(*v)),
+            N::u128(v) => ret.push(N::u128(*v)),
+            N::f64(v) => ret.push(N::f64(*v)),
+            N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::f64(*v as f64)]),
+
+            N::i8(v) => ret.extend_from_slice(&[N::i8(*v), N::r8(Ratio::from(*v))]),
+            N::i16(v) => ret.extend_from_slice(&[N::i16(*v), N::r16(Ratio::from(*v))]),
+            N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::r32(Ratio::from(*v))]),
+            N::i64(v) => ret.extend_from_slice(&[N::i64(*v), N::r64(Ratio::from(*v))]),
+            N::i128(v) => ret.push(N::i128(*v)),
+            N::isize(v) => ret.push(N::rsize(Ratio::from(*v))),
+            _ => {}
+        }
+    }
+    ret
+}
+
+#[test]
+#[cfg(feature = "num-rational")]
+fn test_rational() {
+    use num_rational::Ratio;
 }
