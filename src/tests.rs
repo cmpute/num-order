@@ -681,7 +681,7 @@ fn test_rational() {
         if let Some(f) = ifloat {
             for i in &iequiv {
                 assert_cmp(i, f, Ordering::Equal);
-                assert_eq!(hash(i), hash(f));
+                assert_eq!(hash(i), hash(f), "Hash mismatch between {:?} and {:?}", i, f);
             }
         }
 
