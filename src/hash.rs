@@ -133,8 +133,8 @@ mod _num_rational {
         ($($int:ty)*) => ($(
             impl NumHash for Ratio<$int> {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
-                    let ub = *self.denom() as u128;
-                    let binv = if ub % M127U != 0 {
+                    let ub = *self.denom() as u128; // denom is always positive in Ratio
+                    let binv = if ub != M127U {
                         ModularOps::<&u128>::invm(&ub, &M127U).unwrap()
                     } else {
                         HASH_NEGINF as u128 // no modular inverse, use NEGINF as the result
@@ -153,6 +153,32 @@ mod _num_rational {
     }
 
     impl_hash_for_ratio!(i8 i16 i32 i64 i128 isize);
+
+    #[cfg(feature = "num-bigint")]
+    mod _num_bigint {
+        use super::*;
+        use num_bigint::{BigInt, BigUint};
+        use num_traits::{ToPrimitive, Zero, Signed};
+
+        impl NumHash for Ratio<BigInt> {
+            fn num_hash<H: Hasher>(&self, state: &mut H) {
+                let ub = (self.denom().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
+                let binv = if !ub.is_zero() {
+                    ModularOps::<&u128>::invm(&ub, &M127U).unwrap()
+                } else {
+                    HASH_NEGINF as u128 // no modular inverse, use NEGINF as the result
+                };
+
+                let ua = (self.numer().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
+                let ab = ua.mulm(binv, &M127U);
+                if self.numer().is_negative() {
+                    (ab as i128).neg().hash(state)
+                } else {
+                    (ab as i128).hash(state)
+                }
+            }
+        }
+    }
 }
 
 // Case4: for a + b*sqrt(r), the hash is `hash(a + P64^2*b^2*r)`, (a, b are rational numbers)
