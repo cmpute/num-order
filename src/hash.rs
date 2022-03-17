@@ -15,10 +15,10 @@ use num_modular::{ModularCoreOps, ModularOps};
 use num_traits::Float;
 use core::hash::{Hash, Hasher};
 
-const M127: i128 = i128::MAX; // 127th Mersenne prime
+const M127: i128 = i128::MAX; // a Mersenne prime
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
-const P127: i128 = M127 - 24; // largest prime under M127
+const PROOT: i128 = i32::MAX as i128; // a Mersenne prime
 const HASH_INF: i128 = i128::MAX;
 const HASH_NEGINF: i128 = i128::MIN;
 
@@ -181,9 +181,13 @@ mod _num_rational {
     }
 }
 
-// Case4: for a + b*sqrt(r), the hash is `hash(a + P64^2*b^2*r)`, (a, b are rational numbers)
-// The generalized version is that, hash of (a + b*r^k) will be `hash(a + P64^k*b^k*r)`
-// TODO: how to deal with the sign of b?
+// Case4: for a + b*sqrt(r) where a, b are rational numbers, the hash is
+// - `hash(a + PROOT^2*b^2*r)` if b > 0
+// - `hash(a - PROOT^2*b^2*r)` if b < 0
+// The generalized version is that, hash of (a + b*r^(1/k)) will be `hash(a + PROOT^k*b^k*r)`
+// Some Caveats:
+// 1. if r = 1, the hash is not consistent with normal integer, but r = 1 is forbidden in QuadraticSurd
+// 2. a - b*sqrt(r) and a + b*sqrt(-r) has the same hash, which is usually not a problem
 #[cfg(feature = "num-complex")]
 mod _num_complex {
 

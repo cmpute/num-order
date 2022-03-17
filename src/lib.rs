@@ -90,6 +90,9 @@ pub trait NumOrd<Other> {
 }
 
 /// Consistent hash implementation among different numeric types.
+/// 
+/// It's ensured that if `a.num_eq(b)`, then `a` and `b` will result in the same hash. Although the other direction is
+/// not ensured because it's infeasible, the hash function is still designed to be as sparse as possible.
 pub trait NumHash {
     /// Consistent [Hash::hash][core::hash::Hash::hash] on different numeric types.
     /// 

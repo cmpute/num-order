@@ -17,9 +17,9 @@ enum N {
     i8(i8), i16(i16), i32(i32), i64(i64), i128(i128), isize(isize),
     f32(f32), f64(f64),
     #[cfg(feature = "num-bigint")]
-    biguint(BigUint),
+    ubig(BigUint),
     #[cfg(feature = "num-bigint")]
-    bigint(BigInt),
+    ibig(BigInt),
     #[cfg(feature = "num-rational")]
     r8(Ratio<i8>),
     #[cfg(feature = "num-rational")]
@@ -30,6 +30,8 @@ enum N {
     r64(Ratio<i64>),
     #[cfg(feature = "num-rational")]
     rsize(Ratio<isize>),
+    #[cfg(all(feature = "num-bigint", feature = "num-rational"))]
+    rbig(Ratio<BigInt>),
 }
 
 macro_rules! repeat_arms {
@@ -41,9 +43,9 @@ macro_rules! repeat_arms {
             N::i64($v) => $arm, N::i128($v) => $arm, N::isize($v) => $arm,
             N::f32($v) => $arm, N::f64($v) => $arm,
             #[cfg(feature = "num-bigint")]
-            N::biguint($v) => $arm,
+            N::ubig($v) => $arm,
             #[cfg(feature = "num-bigint")]
-            N::bigint($v) => $arm,
+            N::ibig($v) => $arm,
             #[cfg(feature = "num-rational")]
             N::r8($v) => $arm,
             #[cfg(feature = "num-rational")]
@@ -54,6 +56,8 @@ macro_rules! repeat_arms {
             N::r64($v) => $arm,
             #[cfg(feature = "num-rational")]
             N::rsize($v) => $arm,
+            #[cfg(all(feature = "num-bigint", feature = "num-rational"))]
+            N::rbig($v) => $arm
         }
     };
 }
@@ -403,16 +407,16 @@ fn expand_equiv_class(cls: &[N]) -> Vec<N> {
         // size extension for bigints
         #[cfg(feature = "num-bigint")]
         match e {
-            N::u8(v) => ret.push(N::biguint(BigUint::from(*v))),
-            N::u16(v) => ret.push(N::biguint(BigUint::from(*v))),
-            N::u32(v) => ret.push(N::biguint(BigUint::from(*v))),
-            N::u64(v) => ret.push(N::biguint(BigUint::from(*v))),
-            N::u128(v) => ret.push(N::biguint(BigUint::from(*v))),
-            N::i8(v) => ret.push(N::bigint(BigInt::from(*v))),
-            N::i16(v) => ret.push(N::bigint(BigInt::from(*v))),
-            N::i32(v) => ret.push(N::bigint(BigInt::from(*v))),
-            N::i64(v) => ret.push(N::bigint(BigInt::from(*v))),
-            N::i128(v) => ret.push(N::bigint(BigInt::from(*v))),
+            N::u8(v) => ret.push(N::ubig(BigUint::from(*v))),
+            N::u16(v) => ret.push(N::ubig(BigUint::from(*v))),
+            N::u32(v) => ret.push(N::ubig(BigUint::from(*v))),
+            N::u64(v) => ret.push(N::ubig(BigUint::from(*v))),
+            N::u128(v) => ret.push(N::ubig(BigUint::from(*v))),
+            N::i8(v) => ret.push(N::ibig(BigInt::from(*v))),
+            N::i16(v) => ret.push(N::ibig(BigInt::from(*v))),
+            N::i32(v) => ret.push(N::ibig(BigInt::from(*v))),
+            N::i64(v) => ret.push(N::ibig(BigInt::from(*v))),
+            N::i128(v) => ret.push(N::ibig(BigInt::from(*v))),
             _ => {}
         }
 
@@ -567,8 +571,13 @@ fn test_rational_using_prim() {
                 N::i16(v) => ret.extend_from_slice(&[N::i16(*v), N::r16(Ratio::from(*v))]),
                 N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::r32(Ratio::from(*v))]),
                 N::i64(v) => ret.extend_from_slice(&[N::i64(*v), N::r64(Ratio::from(*v))]),
+                #[cfg(not(feature = "num-bigint"))]
                 N::i128(v) => ret.push(N::i128(*v)),
+                #[cfg(feature = "num-bigint")]
+                N::i128(v) => ret.extend_from_slice(&[N::i128(*v), N::rbig(Ratio::from(BigInt::from(*v)))]),
                 N::isize(v) => ret.extend_from_slice(&[N::isize(*v), N::rsize(Ratio::from(*v))]),
+                #[cfg(feature = "num-bigint")]
+                N::ibig(v) => ret.extend_from_slice(&[N::ibig(v.clone()), N::rbig(Ratio::from(v.clone()))]),
                 _ => {}
             }
         }
@@ -601,6 +610,9 @@ fn test_rational_using_prim() {
 #[test]
 #[cfg(feature = "num-rational")]
 fn test_rational() {
+    #[cfg(feature = "num-bigint")]
+    let big = || BigInt::from(1u8) << 200u8;
+    
     // additional test cases for rational numbers: (numer, denom, float value)
     let ratio_coeffs = [
         (N::i8(-2), N::i8(1), Some(N::f32(-2.))),
@@ -608,7 +620,11 @@ fn test_rational() {
         // near -1
         (N::i32(i32::MIN), N::i32(i32::MAX), None),
         (N::i64(i64::MIN), N::i64(i64::MAX), None),
+        #[cfg(feature = "num-bigint")]
+        (N::ibig(-big()), N::ibig(big() - 1), None),
         (N::i8(-1), N::i8(1), Some(N::f32(-1.))),
+        #[cfg(feature = "num-bigint")]
+        (N::ibig(-big()), N::ibig(big() + 1), None),
         (N::i64(i64::MIN + 2), N::i64(i64::MAX), None),
         (N::i32(i32::MIN + 2), N::i32(i32::MAX), None),
 
@@ -622,7 +638,11 @@ fn test_rational() {
         // near 0
         (N::i32(-1), N::i32(i32::MAX), None),
         (N::i64(-1), N::i64(i64::MAX), None),
+        #[cfg(feature = "num-bigint")]
+        (N::ibig(-BigInt::from(1u8)), N::ibig(big()), None),
         (N::i8(0), N::i8(1), Some(N::f32(0.))),
+        #[cfg(feature = "num-bigint")]
+        (N::ibig(BigInt::from(1u8)), N::ibig(big()), None),
         (N::i64(1), N::i64(i64::MAX), None),
         (N::i32(1), N::i32(i32::MAX), None),
 
@@ -636,7 +656,11 @@ fn test_rational() {
         // near 1
         (N::i32(i32::MAX-1), N::i32(i32::MAX), None),
         (N::i64(i64::MAX-1), N::i64(i64::MAX), None),
+        #[cfg(feature = "num-bigint")]
+        (N::ibig(big()), N::ibig(big() + 1), None),
         (N::i8(1), N::i8(1), Some(N::f32(1.))),
+        #[cfg(feature = "num-bigint")]
+        (N::ibig(big()), N::ibig(big() - 1), None),
         (N::i64(i64::MAX), N::i64(i64::MAX-1), None),
         (N::i32(i32::MAX), N::i32(i32::MAX-1), None),
 
@@ -646,6 +670,7 @@ fn test_rational() {
     fn expand_equiv_class_ratio(num: &N, den: &N) -> Vec<N> {
         let mut ret = Vec::new();
 
+        #[cfg(not(feature = "num-bigint"))]
         match (num, den) {
             (N::i8(num), N::i8(den)) => ret.extend_from_slice(&[
                 N::r8(Ratio::new(*num, *den)),
@@ -661,6 +686,31 @@ fn test_rational() {
                 N::r64(Ratio::new(*num as i64, *den as i64))]),
             (N::i64(num), N::i64(den)) => ret.extend_from_slice(&[
                 N::r64(Ratio::new(*num as i64, *den as i64))]),
+            (_, _) => unreachable!()
+        };
+
+        #[cfg(feature = "num-bigint")]
+        match (num, den) {
+            (N::i8(num), N::i8(den)) => ret.extend_from_slice(&[
+                N::r8(Ratio::new(*num, *den)),
+                N::r16(Ratio::new(*num as i16, *den as i16)),
+                N::r32(Ratio::new(*num as i32, *den as i32)),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::rbig(Ratio::new((*num).into(), (*den).into()))]),
+            (N::i16(num), N::i16(den)) => ret.extend_from_slice(&[
+                N::r16(Ratio::new(*num as i16, *den as i16)),
+                N::r32(Ratio::new(*num as i32, *den as i32)),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::rbig(Ratio::new((*num).into(), (*den).into()))]),
+            (N::i32(num), N::i32(den)) => ret.extend_from_slice(&[
+                N::r32(Ratio::new(*num as i32, *den as i32)),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::rbig(Ratio::new((*num).into(), (*den).into()))]),
+            (N::i64(num), N::i64(den)) => ret.extend_from_slice(&[
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::rbig(Ratio::new((*num).into(), (*den).into()))]),
+            (N::ibig(num), N::ibig(den)) => ret.extend_from_slice(&[
+                N::rbig(Ratio::new(num.clone(), den.clone()))]),
             (_, _) => unreachable!()
         };
         ret

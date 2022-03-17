@@ -344,7 +344,7 @@ mod _num_rational {
             impl NumOrd<$t> for Ratio<$t> {
                 #[inline]
                 fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
-                    self.numer().partial_cmp(&(*other * self.denom()))
+                    self.numer().partial_cmp(&(other * self.denom()))
                 }
             }
         )*);
@@ -741,6 +741,7 @@ mod _num_rational {
         impl_ratio_ord_between_diff_sign! {
             i8 => BigUint; i16 => BigUint; i32 => BigUint; i64 => BigUint; i128 => BigUint;
         }
+        impl_ratio_ord_with_int!(BigInt BigUint);
         impl_ratio_with_size_types_ord!(BigInt BigUint);
         impl_ratio_ord_with_size_types!(BigInt BigUint);
 
@@ -866,7 +867,23 @@ mod _num_rational {
                 }
             }
         }
-        impl_ord_by_swap!{ f32|Ratio<BigInt>; f32|Ratio<BigUint>; f64|Ratio<BigInt>; f64|Ratio<BigUint>; Ratio<BigInt>|Ratio<BigUint>; }
+        impl NumOrd<Ratio<BigInt>> for BigUint {
+            #[inline]
+            fn num_partial_cmp(&self, other: &Ratio<BigInt>) -> Option<Ordering> {
+                if other.is_negative() {
+                    Some(Ordering::Greater)
+                } else {
+                    let rnum = other.numer().magnitude();
+                    let rden = other.denom().magnitude();
+                    (self * rden).partial_cmp(&rnum)
+                }
+            }
+        }
+        impl_ord_by_swap!{
+            f32|Ratio<BigInt>; f32|Ratio<BigUint>;
+            f64|Ratio<BigInt>; f64|Ratio<BigUint>;
+            Ratio<BigInt>|Ratio<BigUint>; Ratio<BigInt>|BigUint;
+        }
     }
 }
 
