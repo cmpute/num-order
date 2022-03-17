@@ -401,6 +401,7 @@ fn expand_equiv_class(cls: &[N]) -> Vec<N> {
             N::isize(v) => ret.push(N::isize(*v)),
             N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::f64(*v as f64)]),
             N::f64(v) => ret.push(N::f64(*v)),
+            #[cfg(any(feature = "num-rational", feature = "num-bigint"))]
             _ => {}
         }
 
