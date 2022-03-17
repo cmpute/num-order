@@ -1,6 +1,6 @@
 [package]
 name = "num-order"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2018"
 
 license = "Apache-2.0"
@@ -21,8 +21,8 @@ num-rational = { version = "0.4", optional = true }
 num-complex = { version = "0.4", optional = true }
 
 [features]
-default = ["libm", "num-rational"]
+default = ["libm"]
 std = []
 
 [package.metadata.docs.rs]
-all-features = true # TODO: don't enable std
+features = ["num-rational", "num-bigint"]

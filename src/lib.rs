@@ -6,7 +6,7 @@
 //! use std::cmp::Ordering;
 //! use std::hash::Hasher;
 //! use std::collections::hash_map::DefaultHasher;
-//! use num_order::{NumOrd, NumHash};
+//! use num_order::NumOrd;
 //! 
 //! assert!(NumOrd::num_eq(&3u64, &3.0f32));
 //! assert!(NumOrd::num_lt(&-4.7f64, &-4i8));
@@ -18,6 +18,7 @@
 //! assert_ne!(NumOrd::num_cmp(&40_000_001f32, &40_000_001u32), Ordering::Equal);
 //! assert_eq!(NumOrd::num_partial_cmp(&f32::NAN, &40_000_002u32), None);
 //! 
+//! use num_order::NumHash;
 //! // same hash values are guaranteed for equal numbers
 //! let mut hasher1 = DefaultHasher::new();
 //! 3u64.num_hash(&mut hasher1);
@@ -32,6 +33,8 @@
 //! 
 //! # Optional Features
 //! - `num-bigint`: Support comparing against and hashing `num-bigint::{BigInt, BigUint}`
+//! - `num-rational`: Support comparing against and hashing `num-rational::Ratio::<I>`, where `I` can be
+//!     `i8`, `i16`, `i32`, `i64` and `isize`.
 //! 
 
 #![no_std]
