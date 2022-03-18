@@ -887,7 +887,94 @@ mod _num_rational {
     }
 }
 
+// Order of complex numbers is implemented as lexicographic order
 #[cfg(feature = "num-complex")]
 mod _num_complex {
+    use super::*;
+    use num_complex::{Complex, Complex32, Complex64};
 
+    macro_rules! impl_complex_ord_lexical {
+        ($($t1:ty | $t2:ty;)*) => ($(
+            impl NumOrd<Complex<$t2>> for Complex<$t1> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Complex<$t2>) -> Option<Ordering> {
+                    let re_cmp = self.re.num_partial_cmp(&other.re);
+                    if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
+                        self.im.num_partial_cmp(&other.im)
+                    } else {
+                        re_cmp
+                    }
+                }
+            }
+        )*);
+        ($($t:ty)*) => ($(
+            impl NumOrd<Complex<$t>> for Complex<$t> {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Complex<$t>) -> Option<Ordering> {
+                    let re_cmp = self.re.partial_cmp(&other.re);
+                    if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
+                        self.im.partial_cmp(&other.im)
+                    } else {
+                        re_cmp
+                    }
+                }
+            }
+        )*);
+    }
+    impl_complex_ord_lexical!(f32 f64);
+    impl_complex_ord_lexical!{f32|f64; f64|f32;}
+
+    macro_rules! impl_complex_ord_with_real {
+        ($($t:ty)*) => ($(
+            impl NumOrd<$t> for Complex32 {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                    let re_cmp = self.re.num_partial_cmp(other);
+                    if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
+                        self.im.num_partial_cmp(&0f32)
+                    } else {
+                        re_cmp
+                    }
+                }
+            }
+            impl NumOrd<Complex32> for $t {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Complex32) -> Option<Ordering> {
+                    let re_cmp = self.num_partial_cmp(&other.re);
+                    if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
+                        0f32.num_partial_cmp(&other.im)
+                    } else {
+                        re_cmp
+                    }
+                }
+            }
+            impl NumOrd<$t> for Complex64 {
+                #[inline]
+                fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                    let re_cmp = self.re.num_partial_cmp(other);
+                    if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
+                        self.im.num_partial_cmp(&0f64)
+                    } else {
+                        re_cmp
+                    }
+                }
+            }
+            impl NumOrd<Complex64> for $t {
+                #[inline]
+                fn num_partial_cmp(&self, other: &Complex64) -> Option<Ordering> {
+                    let re_cmp = self.num_partial_cmp(&other.re);
+                    if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
+                        0f64.num_partial_cmp(&other.im)
+                    } else {
+                        re_cmp
+                    }
+                }
+            }
+        )*);
+    }
+    impl_complex_ord_with_real! (
+        i8 i16 i32 i64 i128 isize
+        u8 u16 u32 u64 u128 usize
+        f32 f64
+    );
 }

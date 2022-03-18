@@ -11,14 +11,16 @@
 
 use crate::NumHash;
 
-use num_modular::{ModularCoreOps, ModularOps};
-use num_traits::Float;
+use num_modular::ModularCoreOps;
+#[cfg(feature = "num-rational")]
+use num_modular::ModularOps;
+use num_traits::float::FloatCore;
 use core::hash::{Hash, Hasher};
 
 const M127: i128 = i128::MAX; // a Mersenne prime
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
-const PROOT: i128 = i32::MAX as i128; // a Mersenne prime
+const PROOT: u128 = i32::MAX as u128; // a Mersenne prime
 const HASH_INF: i128 = i128::MAX;
 const HASH_NEGINF: i128 = i128::MIN;
 
@@ -97,26 +99,30 @@ mod _num_bigint {
     }
 }
 
+fn hash_float<T: FloatCore>(v: &T) -> i128 {
+    if v.is_nan() {
+        0i128 // assign 0 to nan
+    } else if v.is_infinite() {
+        if v.is_sign_positive() {
+            HASH_INF
+        } else {
+            HASH_NEGINF
+        }
+    } else {
+        let (mantissa, exp, sign) = v.integer_decode();
+        // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
+        let exp = if exp > 0 { (exp as u16) % 127 } else { ModularCoreOps::<u16>::negm(&(-exp as u16), &127) };
+        let v = (mantissa as u128).mulm(1u128 << exp, &M127U);
+        v as i128 * sign as i128
+    }
+}
+
 // Case3: for rational(a, b), the hash is `hash(a * b^-1 mod M127)` (b > 0)
 macro_rules! impl_hash_for_float {
     ($($float:ty)*) => ($(
         impl NumHash for $float {
             fn num_hash<H: Hasher>(&self, state: &mut H) {
-                if self.is_nan() {
-                    0i128.hash(state) // assign 0 to nan
-                } else if self.is_infinite() {
-                    if self.is_sign_positive() {
-                        HASH_INF.hash(state)
-                    } else {
-                        HASH_NEGINF.hash(state)
-                    }
-                } else {
-                    let (mantissa, exp, sign) = self.integer_decode();
-                    // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
-                    let exp = if exp > 0 { (exp as u16) % 127 } else { ModularCoreOps::<u16>::negm(&(-exp as u16), &127) };
-                    let v = (mantissa as u128).mulm(1u128 << exp, &M127U);
-                    (v as i128 * sign as i128).num_hash(state);
-                }
+                hash_float(self).num_hash(state)
             }
         }
     )*);
@@ -190,5 +196,27 @@ mod _num_rational {
 // 2. a - b*sqrt(r) and a + b*sqrt(-r) has the same hash, which is usually not a problem
 #[cfg(feature = "num-complex")]
 mod _num_complex {
+    use super::*;
+    use num_complex::Complex;
 
+    macro_rules! impl_complex_hash_for_float {
+        ($($float:ty)*) => ($(
+            impl NumHash for Complex<$float> {
+                fn num_hash<H: Hasher>(&self, state: &mut H) {
+                    let a = hash_float(&self.re);
+                    let b = hash_float(&self.im);
+        
+                    let bterm = if b >= 0 {
+                        let pb = PROOT.mulm(b as u128, &M127U);
+                        -(pb.mulm(pb, &M127U) as i128)
+                    } else {
+                        let pb = PROOT.mulm((-b) as u128, &M127U);
+                        pb.mulm(pb, &M127U) as i128
+                    };
+                    (a + bterm).num_hash(state)
+                }
+            }
+        )*);
+    }
+    impl_complex_hash_for_float!(f32 f64);
 }
