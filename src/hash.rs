@@ -20,6 +20,7 @@ use core::hash::{Hash, Hasher};
 const M127: i128 = i128::MAX; // a Mersenne prime
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
+#[cfg(feature = "num-complex")]
 const PROOT: u128 = i32::MAX as u128; // a Mersenne prime
 const HASH_INF: i128 = i128::MAX;
 const HASH_NEGINF: i128 = i128::MIN;

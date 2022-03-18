@@ -33,9 +33,10 @@
 //! 
 //! # Optional Features
 //! - `num-bigint`: Support comparing against and hashing `num-bigint::{BigInt, BigUint}`
-//! - `num-rational`: Support comparing against and hashing `num-rational::Ratio::<I>`, where `I` can be
+//! - `num-rational`: Support comparing against and hashing `num-rational::Ratio<I>`, where `I` can be
 //!     `i8`, `i16`, `i32`, `i64` and `isize`. `Ratio<BigInt>` is supported when both `num-bigint`
 //!     and `num-rational` is enabled
+//! - `num-complex`: Support comparing against and hashing `num-complex::{Complex32, Complex64}`
 //! 
 
 #![no_std]

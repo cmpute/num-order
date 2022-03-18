@@ -25,4 +25,4 @@ default = ["libm"]
 std = []
 
 [package.metadata.docs.rs]
-features = ["num-rational", "num-bigint"]
+features = ["num-rational", "num-bigint", "num-complex"]

@@ -704,59 +704,66 @@ fn test_rational() {
         (N::i8(2), N::i8(1), Some(N::f32(2.))),
     ];
 
-    fn expand_equiv_class_ratio(num: &N, den: &N) -> Vec<N> {
+    fn expand_equiv_class_ratio(coeffs: &(N, N, Option<N>)) -> Vec<N> {
         let mut ret = Vec::new();
 
         #[cfg(not(feature = "num-bigint"))]
-        match (num, den) {
-            (N::i8(num), N::i8(den)) => ret.extend_from_slice(&[
+        match coeffs {
+            (N::i8(num), N::i8(den), _) => ret.extend_from_slice(&[
                 N::r8(Ratio::new(*num, *den)),
                 N::r16(Ratio::new(*num as i16, *den as i16)),
                 N::r32(Ratio::new(*num as i32, *den as i32)),
                 N::r64(Ratio::new(*num as i64, *den as i64))]),
-            (N::i16(num), N::i16(den)) => ret.extend_from_slice(&[
+            (N::i16(num), N::i16(den), _) => ret.extend_from_slice(&[
                 N::r16(Ratio::new(*num as i16, *den as i16)),
                 N::r32(Ratio::new(*num as i32, *den as i32)),
                 N::r64(Ratio::new(*num as i64, *den as i64))]),
-            (N::i32(num), N::i32(den)) => ret.extend_from_slice(&[
+            (N::i32(num), N::i32(den), _) => ret.extend_from_slice(&[
                 N::r32(Ratio::new(*num as i32, *den as i32)),
                 N::r64(Ratio::new(*num as i64, *den as i64))]),
-            (N::i64(num), N::i64(den)) => ret.extend_from_slice(&[
+            (N::i64(num), N::i64(den), _) => ret.extend_from_slice(&[
                 N::r64(Ratio::new(*num as i64, *den as i64))]),
-            (_, _) => unreachable!()
+            _ => unreachable!()
         };
 
         #[cfg(feature = "num-bigint")]
-        match (num, den) {
-            (N::i8(num), N::i8(den)) => ret.extend_from_slice(&[
+        match coeffs {
+            (N::i8(num), N::i8(den), _) => ret.extend_from_slice(&[
                 N::r8(Ratio::new(*num, *den)),
                 N::r16(Ratio::new(*num as i16, *den as i16)),
                 N::r32(Ratio::new(*num as i32, *den as i32)),
                 N::r64(Ratio::new(*num as i64, *den as i64)),
                 N::rbig(Ratio::new((*num).into(), (*den).into()))]),
-            (N::i16(num), N::i16(den)) => ret.extend_from_slice(&[
+            (N::i16(num), N::i16(den), _) => ret.extend_from_slice(&[
                 N::r16(Ratio::new(*num as i16, *den as i16)),
                 N::r32(Ratio::new(*num as i32, *den as i32)),
                 N::r64(Ratio::new(*num as i64, *den as i64)),
                 N::rbig(Ratio::new((*num).into(), (*den).into()))]),
-            (N::i32(num), N::i32(den)) => ret.extend_from_slice(&[
+            (N::i32(num), N::i32(den), _) => ret.extend_from_slice(&[
                 N::r32(Ratio::new(*num as i32, *den as i32)),
                 N::r64(Ratio::new(*num as i64, *den as i64)),
                 N::rbig(Ratio::new((*num).into(), (*den).into()))]),
-            (N::i64(num), N::i64(den)) => ret.extend_from_slice(&[
+            (N::i64(num), N::i64(den), _) => ret.extend_from_slice(&[
                 N::r64(Ratio::new(*num as i64, *den as i64)),
                 N::rbig(Ratio::new((*num).into(), (*den).into()))]),
-            (N::ibig(num), N::ibig(den)) => ret.extend_from_slice(&[
+            (N::ibig(num), N::ibig(den), _) => ret.extend_from_slice(&[
                 N::rbig(Ratio::new(num.clone(), den.clone()))]),
-            (_, _) => unreachable!()
+            _ => unreachable!()
         };
+
+        match coeffs.2 {
+            Some(N::f32(v)) => ret.extend_from_slice(&[
+                N::f32(v), N::f64(v as f64)
+            ]),
+            Some(N::f64(v)) => ret.push(N::f64(v as f64)),
+            _ => {}
+        }
         ret
     }
 
     // test comparison and hashing
     for icls in 0..ratio_coeffs.len() {
-        let (inum, iden, ifloat) = &ratio_coeffs[icls];
-        let iequiv = expand_equiv_class_ratio(inum, iden);
+        let iequiv = expand_equiv_class_ratio(&ratio_coeffs[icls]);
 
         // test hashing
         let hashes: Vec<u64> = iequiv.iter().map(hash).collect();
@@ -765,16 +772,15 @@ fn test_rational() {
         }
         
         // test comparison with float
-        if let Some(f) = ifloat {
-            for i in &iequiv {
-                assert_cmp(i, f, Ordering::Equal);
-                assert_eq!(hash(i), hash(f), "Hash mismatch between {:?} and {:?}", i, f);
-            }
-        }
+        // if let Some(f) = ifloat {
+        //     for i in &iequiv {
+        //         assert_cmp(i, f, Ordering::Equal);
+        //         assert_eq!(hash(i), hash(f), "Hash mismatch between {:?} and {:?}", i, f);
+        //     }
+        // }
 
         for jcls in 0..ratio_coeffs.len() {
-            let (jnum, jden, _) = &ratio_coeffs[jcls];
-            let jequiv = expand_equiv_class_ratio(jnum, jden);
+            let jequiv = expand_equiv_class_ratio(&ratio_coeffs[jcls]);
 
             let expected = icls.cmp(&jcls);
             for i in &iequiv {

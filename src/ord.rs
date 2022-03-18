@@ -999,7 +999,25 @@ mod _num_complex {
         use super::*;
         use num_bigint::{BigInt, BigUint};
         impl_complex_ord_with_real! (
-            BigInt, BigUint
+            BigInt BigUint
         );
+    }
+
+    #[cfg(feature = "num-rational")]
+    mod _num_rational {
+        use super::*;
+        use num_rational::Ratio;
+        impl_complex_ord_with_real! (
+            Ratio<i8> Ratio<i16> Ratio<i32> Ratio<i64> Ratio<isize>
+        );
+
+        #[cfg(feature = "num-bigint")]
+        mod _num_bigint {
+            use super::*;
+            use num_bigint::{BigInt, BigUint};
+            impl_complex_ord_with_real! (
+                Ratio<BigInt> Ratio<BigUint>
+            );
+        }
     }
 }
