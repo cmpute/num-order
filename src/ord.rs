@@ -929,6 +929,10 @@ mod _num_complex {
             impl NumOrd<$t> for Complex32 {
                 #[inline]
                 fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                    if self.im.is_nan() { // shortcut nan tests
+                        return None;
+                    }
+
                     let re_cmp = self.re.num_partial_cmp(other);
                     if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
                         self.im.num_partial_cmp(&0f32)
@@ -940,6 +944,10 @@ mod _num_complex {
             impl NumOrd<Complex32> for $t {
                 #[inline]
                 fn num_partial_cmp(&self, other: &Complex32) -> Option<Ordering> {
+                    if other.im.is_nan() { // shortcut nan tests
+                        return None;
+                    }
+
                     let re_cmp = self.num_partial_cmp(&other.re);
                     if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
                         0f32.num_partial_cmp(&other.im)
@@ -951,6 +959,10 @@ mod _num_complex {
             impl NumOrd<$t> for Complex64 {
                 #[inline]
                 fn num_partial_cmp(&self, other: &$t) -> Option<Ordering> {
+                    if self.im.is_nan() { // shortcut nan tests
+                        return None;
+                    }
+
                     let re_cmp = self.re.num_partial_cmp(other);
                     if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
                         self.im.num_partial_cmp(&0f64)
@@ -962,6 +974,10 @@ mod _num_complex {
             impl NumOrd<Complex64> for $t {
                 #[inline]
                 fn num_partial_cmp(&self, other: &Complex64) -> Option<Ordering> {
+                    if other.im.is_nan() { // shortcut nan tests
+                        return None;
+                    }
+
                     let re_cmp = self.num_partial_cmp(&other.re);
                     if matches!(re_cmp, Some(o) if o == Ordering::Equal) {
                         0f64.num_partial_cmp(&other.im)
@@ -977,4 +993,13 @@ mod _num_complex {
         u8 u16 u32 u64 u128 usize
         f32 f64
     );
+
+    #[cfg(feature = "num-bigint")]
+    mod _num_bigint {
+        use super::*;
+        use num_bigint::{BigInt, BigUint};
+        impl_complex_ord_with_real! (
+            BigInt, BigUint
+        );
+    }
 }

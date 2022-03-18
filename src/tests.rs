@@ -9,6 +9,8 @@ use std::cmp::Ordering::{self, *};
 use num_bigint::{BigInt, BigUint};
 #[cfg(feature = "num-rational")]
 use num_rational::Ratio;
+#[cfg(feature = "num-complex")]
+use num_complex::Complex;
 
 #[derive(Clone, Debug)]
 #[allow(non_camel_case_types)]
@@ -32,6 +34,10 @@ enum N {
     rsize(Ratio<isize>),
     #[cfg(all(feature = "num-bigint", feature = "num-rational"))]
     rbig(Ratio<BigInt>),
+    #[cfg(feature = "num-complex")]
+    c32(Complex<f32>),
+    #[cfg(feature = "num-complex")]
+    c64(Complex<f64>),
 }
 
 macro_rules! repeat_arms {
@@ -57,7 +63,11 @@ macro_rules! repeat_arms {
             #[cfg(feature = "num-rational")]
             N::rsize($v) => $arm,
             #[cfg(all(feature = "num-bigint", feature = "num-rational"))]
-            N::rbig($v) => $arm
+            N::rbig($v) => $arm,
+            #[cfg(feature = "num-complex")]
+            N::c32($v) => $arm,
+            #[cfg(feature = "num-complex")]
+            N::c64($v) => $arm,
         }
     };
 }
@@ -401,7 +411,7 @@ fn expand_equiv_class(cls: &[N]) -> Vec<N> {
             N::isize(v) => ret.push(N::isize(*v)),
             N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::f64(*v as f64)]),
             N::f64(v) => ret.push(N::f64(*v)),
-            #[cfg(any(feature = "num-rational", feature = "num-bigint"))]
+            #[cfg(any(feature = "num-rational", feature = "num-bigint", feature = "num-complex"))]
             _ => {}
         }
 
@@ -530,6 +540,16 @@ fn test_nan() {
             assert_cmp(i, &N::f64(f64::NAN), None);
             assert_cmp(&N::f32(f32::NAN), i, None);
             assert_cmp(&N::f64(f64::NAN), i, None);
+
+            #[cfg(feature = "num-complex")]
+            {
+                assert_cmp(i, &N::c32(Complex::new(f32::NAN, 0.)), None);
+                assert_cmp(i, &N::c32(Complex::new(0., f32::NAN)), None);
+                assert_cmp(i, &N::c32(Complex::new(f32::NAN, f32::NAN)), None);
+                assert_cmp(&N::c32(Complex::new(f32::NAN, 0.)), i, None);
+                assert_cmp(&N::c32(Complex::new(0., f32::NAN)), i, None);
+                assert_cmp(&N::c32(Complex::new(f32::NAN, f32::NAN)), i, None);
+            }
         }
     }
 
@@ -538,6 +558,22 @@ fn test_nan() {
     assert_cmp(&N::f32(f32::NAN), &N::f64(f64::NAN), None);
     assert_cmp(&N::f64(f64::NAN), &N::f32(f32::NAN), None);
     assert_cmp(&N::f64(f64::NAN), &N::f64(f64::NAN), None);
+
+    #[cfg(feature = "num-complex")]
+    {
+        let cnan0 = N::c32(Complex::new(f32::NAN, 0.));
+        let c0nan = N::c32(Complex::new(0., f32::NAN));
+        let cnannan = N::c32(Complex::new(f32::NAN, f32::NAN));
+        assert_cmp(&cnan0, &cnan0, None);
+        assert_cmp(&cnan0, &c0nan, None);
+        assert_cmp(&cnan0, &cnannan, None);
+        assert_cmp(&c0nan, &cnan0, None);
+        assert_cmp(&c0nan, &c0nan, None);
+        assert_cmp(&c0nan, &cnannan, None);
+        assert_cmp(&cnannan, &cnan0, None);
+        assert_cmp(&cnannan, &c0nan, None);
+        assert_cmp(&cnannan, &cnannan, None);
+    }
 }
 
 
@@ -553,7 +589,7 @@ fn test_hash() {
 
 #[test]
 #[cfg(feature = "num-rational")]
-fn test_rational_using_prim() {
+fn test_rational_using_primitives() {
     fn expand_equiv_class_ratio(cls: &[N]) -> Vec<N> {
         let mut ret = Vec::new();
     
@@ -739,6 +775,117 @@ fn test_rational() {
         for jcls in 0..ratio_coeffs.len() {
             let (jnum, jden, _) = &ratio_coeffs[jcls];
             let jequiv = expand_equiv_class_ratio(jnum, jden);
+
+            let expected = icls.cmp(&jcls);
+            for i in &iequiv {
+                for j in &jequiv {
+                    assert_cmp(i, j, expected);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+#[cfg(feature = "num-complex")]
+fn test_complex_using_primitives() {
+    fn expand_equiv_class_ratio(cls: &[N]) -> Vec<N> {
+        let mut ret = Vec::new();
+    
+        for e in cls {
+            // size extension
+            match e {
+                N::u8(v) => ret.push(N::u8(*v)),
+                N::u16(v) => ret.push(N::u16(*v)),
+                N::u32(v) => ret.push(N::u32(*v)),
+                N::u64(v) => ret.push(N::u64(*v)),
+                N::u128(v) => ret.push(N::u128(*v)),
+                N::i8(v) => ret.push(N::i8(*v)),
+                N::i16(v) => ret.push(N::i16(*v)),
+                N::i32(v) => ret.push(N::i32(*v)),
+                N::i64(v) => ret.push(N::i64(*v)),
+                N::i128(v) => ret.push(N::i128(*v)),
+                N::f64(v) => ret.extend_from_slice(&[N::f64(*v), N::c64(Complex::from(*v))]),
+                N::f32(v) => ret.extend_from_slice(&[N::f32(*v), N::c32(Complex::from(*v)),
+                    N::f64(*v as f64), N::c64(Complex::from(*v as f64))]),
+                _ => {}
+            }
+        }
+        ret
+    }
+
+    let numbers: Vec<_> = NUMBERS.iter().map(|cls| expand_equiv_class_ratio(cls)).collect();
+
+    // comparison between numbers
+    for icls in 0..numbers.len() {
+        for jcls in 0..numbers.len() {
+            let expected = icls.cmp(&jcls);
+            for i in &numbers[icls] {
+                for j in &numbers[jcls] {
+                    assert_cmp(i, j, expected);
+                }
+            }
+        }
+    }
+
+    for &equiv in NUMBERS {
+        let equiv = expand_equiv_class_ratio(equiv);
+        let hashes: Vec<u64> = equiv.iter().map(hash).collect();
+        for i in 1..equiv.len() {
+            assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", equiv[0], equiv[i]);
+        }
+    }
+}
+
+#[test]
+#[cfg(feature = "num-complex")]
+fn test_complex() {
+    // additional test cases for complex numbers: (real, image)
+    let ratio_coeffs = [        
+        (N::f32(-1.), N::f32(-1.)),
+        (N::f32(-1.), N::f32(0.)),
+        (N::f32(-1.), N::f32(1.)),
+
+        (N::f32(0.), N::f32(-1.)),
+        (N::f32(0.), N::f32(0.)),
+        (N::f32(0.), N::f32(1.)),
+
+        (N::f32(1.), N::f32(-1.)),
+        (N::f32(1.), N::f32(0.)),
+        (N::f32(1.), N::f32(1.)),
+    ];
+
+    fn expand_equiv_class_ratio(coeffs: &(N, N)) -> Vec<N> {
+        let mut ret = Vec::new();
+        match coeffs {
+            (N::f32(re), N::f32(im)) if im == &0. => ret.extend_from_slice(&[
+                N::c32(Complex::new(*re, *im)),
+                N::c64(Complex::new(*re as f64, *im as f64)),
+                N::f32(*re), N::f64(*re as f64)]),
+            (N::f32(re), N::f32(im)) => ret.extend_from_slice(&[
+                N::c32(Complex::new(*re, *im)),
+                N::c64(Complex::new(*re as f64, *im as f64))]),
+            (N::f64(re), N::f64(im)) if im == &0. => ret.extend_from_slice(&[
+                N::c64(Complex::new(*re, *im)), N::f64(*re as f64)]),
+            (N::f64(re), N::f64(im)) => ret.push(
+                N::c64(Complex::new(*re, *im))),
+            (_, _) => unreachable!()
+        };
+        ret
+    }
+
+    // test comparison and hashing
+    for icls in 0..ratio_coeffs.len() {
+        let iequiv = expand_equiv_class_ratio(&ratio_coeffs[icls]);
+
+        // test hashing
+        let hashes: Vec<u64> = iequiv.iter().map(hash).collect();
+        for i in 1..iequiv.len() {
+            assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", iequiv[0], iequiv[i]);
+        }
+
+        for jcls in 0..ratio_coeffs.len() {
+            let jequiv = expand_equiv_class_ratio(&ratio_coeffs[jcls]);
 
             let expected = icls.cmp(&jcls);
             for i in &iequiv {
