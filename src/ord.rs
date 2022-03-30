@@ -1,6 +1,8 @@
 use crate::NumOrd;
 use core::convert::TryFrom;
 use core::cmp::Ordering;
+use num_modular::udouble;
+use num_traits::One;
 
 // Case0: swap operand, this introduces overhead so only used for non-primitive types
 #[allow(unused_macros)]
@@ -510,29 +512,33 @@ mod _num_rational {
         i128 => u128; isize => usize;
     }
 
-    // special handling for f64 against u64 and i64
-    // FIXME: comparing Ratio<u128> or Ratio<i128> against floats is not supported yet since we need double width multiplication.
-    // We can implement it efficiently with carrying_mul implemented (rust#85532)
-    impl NumOrd<f64> for Ratio<u64> {
-        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+    macro_rules! float_cmp_shortcuts {
+        ($ratio:tt, $float:tt) => {
             // shortcut for comparing zeros
-            if self.is_zero() {
-                return 0f64.partial_cmp(other)
+            if $ratio.is_zero() {
+                return 0f64.partial_cmp($float)
             }
-            if other.is_zero() {
-                return self.numer().partial_cmp(&0)
+            if $float.is_zero() {
+                return $ratio.numer().partial_cmp(&0)
             }
             
             // shortcut for nan and inf
-            if other.is_nan() {
+            if $float.is_nan() {
                 return None
-            } else if other.is_infinite() {
-                if other.is_sign_positive() {
+            } else if $float.is_infinite() {
+                if $float.is_sign_positive() {
                     return Some(Ordering::Less)
                 } else { // negative
                     return Some(Ordering::Greater)
                 }
             }
+        };
+    }
+
+    // special handling for f64 against u64/i64 and u128/i128
+    impl NumOrd<f64> for Ratio<u64> {
+        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            float_cmp_shortcuts!(self, other);
             
             // other = sign * man * 2^exp
             let (man, exp, sign) = other.integer_decode();
@@ -546,8 +552,8 @@ mod _num_rational {
 
             let result = if exp >= 0 {
                 // r / f = a / (man * 2^exp * b) if exp >= 0
-                if let Some(num) = || -> Option<_> { 1u64.checked_shl(exp as u32)?.checked_mul(man) }() {
-                    a.partial_cmp(&num).unwrap()
+                if let Some(den) = || -> Option<_> { 1u64.checked_shl(exp as u32)?.checked_mul(man)?.checked_mul(b) }() {
+                    a.partial_cmp(&den).unwrap()
                 } else {
                     Ordering::Less
                 }
@@ -565,24 +571,7 @@ mod _num_rational {
     }
     impl NumOrd<f64> for Ratio<i64> {
         fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
-            // shortcut for comparing zeros
-            if self.is_zero() {
-                return 0f64.partial_cmp(other)
-            }
-            if other.is_zero() {
-                return self.numer().partial_cmp(&0)
-            }
-
-            // shortcut for nan and inf
-            if other.is_nan() {
-                return None
-            } else if other.is_infinite() {
-                if other.is_sign_positive() {
-                    return Some(Ordering::Less)
-                } else { // negative
-                    return Some(Ordering::Greater)
-                }
-            }
+            float_cmp_shortcuts!(self, other);
             
             // other = sign * man * 2^exp
             let (man, exp, sign) = other.integer_decode();
@@ -599,8 +588,8 @@ mod _num_rational {
 
             let result = if exp >= 0 {
                 // r / f = a / (man * 2^exp * b) if exp >= 0
-                if let Some(num) = || -> Option<_> { 1u64.checked_shl(exp as u32)?.checked_mul(man) }() {
-                    a.partial_cmp(&num).unwrap()
+                if let Some(den) = || -> Option<_> { 1u64.checked_shl(exp as u32)?.checked_mul(man)?.checked_mul(b) }() {
+                    a.partial_cmp(&den).unwrap()
                 } else {
                     Ordering::Less
                 }
@@ -621,7 +610,87 @@ mod _num_rational {
             }
         }
     }
-    impl_ord_by_swap!(f64|Ratio<i64>; f64|Ratio<u64>;);
+    impl NumOrd<f64> for Ratio<u128> {
+        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            float_cmp_shortcuts!(self, other);
+            
+            // other = sign * man * 2^exp
+            let (man, exp, sign) = other.integer_decode();
+            if sign < 0 {
+                return Some(Ordering::Greater)
+            }
+
+            // self = a / b
+            let a = *self.numer();
+            let b = *self.denom();
+
+            let result = if exp >= 0 {
+                // r / f = a / (man * 2^exp * b) if exp >= 0
+                if let Some(num) = || -> Option<_> { 1u128.checked_shl(exp as u32)?.checked_mul(man as u128)?.checked_mul(b) }() {
+                    a.partial_cmp(&num).unwrap()
+                } else {
+                    Ordering::Less
+                }
+            } else {
+                // r / f = (a * 2^(-exp)) / (man * b) if exp < 0
+                let den = udouble::widening_mul(man as u128, b);
+                if let Some(num) = || -> Option<_> {
+                    let (v, o) = udouble::one().checked_shl((-exp) as u32)?.overflowing_mul(a.into());
+                    if !o { Some(v) } else { None }
+                } () {
+                    num.partial_cmp(&den).unwrap()
+                } else {
+                    Ordering::Greater
+                }
+            };
+            Some(result)
+        }
+    }
+    impl NumOrd<f64> for Ratio<i128> {
+        fn num_partial_cmp(&self, other: &f64) -> Option<Ordering> {
+            float_cmp_shortcuts!(self, other);
+            
+            // other = sign * man * 2^exp
+            let (man, exp, sign) = other.integer_decode();
+            let reverse = match (!self.is_negative(), sign >= 0) {
+                (true, false) => return Some(Ordering::Greater),
+                (false, true) => return Some(Ordering::Less),
+                (true, true) => false,
+                (false, false) => true,
+            };
+
+            // self = a / b, using safe absolute operation
+            let a = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 };
+            let b = if self.denom() < &0 { (*self.denom() as u128).wrapping_neg() } else { *self.denom() as u128 };
+
+            let result = if exp >= 0 {
+                // r / f = a / (man * 2^exp * b) if exp >= 0
+                if let Some(num) = || -> Option<_> { 1u128.checked_shl(exp as u32)?.checked_mul(man as u128)?.checked_mul(b) }() {
+                    a.partial_cmp(&num).unwrap()
+                } else {
+                    Ordering::Less
+                }
+            } else {
+                // r / f = (a * 2^(-exp)) / (man * b) if exp < 0
+                let den = udouble::widening_mul(man as u128, b);
+                if let Some(num) = || -> Option<_> {
+                    let (v, o) = udouble::one().checked_shl((-exp) as u32)?.overflowing_mul(a.into());
+                    if !o { Some(v) } else { None }
+                } () {
+                    num.partial_cmp(&den).unwrap()
+                } else {
+                    Ordering::Greater
+                }
+            };
+
+            if reverse {
+                Some(result.reverse())
+            } else {
+                Some(result)
+            }
+        }
+    }
+    impl_ord_by_swap!(f64|Ratio<i64>; f64|Ratio<u64>; f64|Ratio<i128>; f64|Ratio<u128>;);
 
     // cast to f64 and i64 for comparison
     macro_rules! impl_ratio_ord_with_floats_by_casting {
@@ -647,6 +716,7 @@ mod _num_rational {
         f64 => f64|i8 => i64; f64 => f64|i16 => i64; f64 => f64|i32 => i64;
         f32 => f64|u8 => u64; f32 => f64|u16 => u64; f32 => f64|u32 => u64; f32 => f64|u64 => u64;
         f64 => f64|u8 => u64; f64 => f64|u16 => u64; f64 => f64|u32 => u64;
+        f32 => f64|u128 => u128; f32 => f64|i128 => i128;
     }
 
     // deal with size types

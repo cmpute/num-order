@@ -31,6 +31,8 @@ enum N {
     #[cfg(feature = "num-rational")]
     r64(Ratio<i64>),
     #[cfg(feature = "num-rational")]
+    r128(Ratio<i128>),
+    #[cfg(feature = "num-rational")]
     rsize(Ratio<isize>),
     #[cfg(all(feature = "num-bigint", feature = "num-rational"))]
     rbig(Ratio<BigInt>),
@@ -60,6 +62,8 @@ macro_rules! repeat_arms {
             N::r32($v) => $arm,
             #[cfg(feature = "num-rational")]
             N::r64($v) => $arm,
+            #[cfg(feature = "num-rational")]
+            N::r128($v) => $arm,
             #[cfg(feature = "num-rational")]
             N::rsize($v) => $arm,
             #[cfg(all(feature = "num-bigint", feature = "num-rational"))]
@@ -609,9 +613,9 @@ fn test_rational_using_primitives() {
                 N::i32(v) => ret.extend_from_slice(&[N::i32(*v), N::r32(Ratio::from(*v))]),
                 N::i64(v) => ret.extend_from_slice(&[N::i64(*v), N::r64(Ratio::from(*v))]),
                 #[cfg(not(feature = "num-bigint"))]
-                N::i128(v) => ret.push(N::i128(*v)),
+                N::i128(v) => ret.extend_from_slice(&[N::i128(*v), N::r128(Ratio::from(*v))]),
                 #[cfg(feature = "num-bigint")]
-                N::i128(v) => ret.extend_from_slice(&[N::i128(*v), N::rbig(Ratio::from(BigInt::from(*v)))]),
+                N::i128(v) => ret.extend_from_slice(&[N::i128(*v), N::r128(Ratio::from(*v)), N::rbig(Ratio::from(BigInt::from(*v)))]),
                 N::isize(v) => ret.extend_from_slice(&[N::isize(*v), N::rsize(Ratio::from(*v))]),
                 #[cfg(feature = "num-bigint")]
                 N::ibig(v) => ret.extend_from_slice(&[N::ibig(v.clone()), N::rbig(Ratio::from(v.clone()))]),
@@ -713,16 +717,20 @@ fn test_rational() {
                 N::r8(Ratio::new(*num, *den)),
                 N::r16(Ratio::new(*num as i16, *den as i16)),
                 N::r32(Ratio::new(*num as i32, *den as i32)),
-                N::r64(Ratio::new(*num as i64, *den as i64))]),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::r128(Ratio::new(*num as i128, *den as i128))]),
             (N::i16(num), N::i16(den), _) => ret.extend_from_slice(&[
                 N::r16(Ratio::new(*num as i16, *den as i16)),
                 N::r32(Ratio::new(*num as i32, *den as i32)),
-                N::r64(Ratio::new(*num as i64, *den as i64))]),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::r128(Ratio::new(*num as i128, *den as i128))]),
             (N::i32(num), N::i32(den), _) => ret.extend_from_slice(&[
                 N::r32(Ratio::new(*num as i32, *den as i32)),
-                N::r64(Ratio::new(*num as i64, *den as i64))]),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::r128(Ratio::new(*num as i128, *den as i128))]),
             (N::i64(num), N::i64(den), _) => ret.extend_from_slice(&[
-                N::r64(Ratio::new(*num as i64, *den as i64))]),
+                N::r64(Ratio::new(*num as i64, *den as i64)),
+                N::r128(Ratio::new(*num as i128, *den as i128))]),
             _ => unreachable!()
         };
 
@@ -770,14 +778,6 @@ fn test_rational() {
         for i in 1..iequiv.len() {
             assert_eq!(hashes[0], hashes[i], "Hash mismatch between {:?} and {:?}", iequiv[0], iequiv[i]);
         }
-        
-        // test comparison with float
-        // if let Some(f) = ifloat {
-        //     for i in &iequiv {
-        //         assert_cmp(i, f, Ordering::Equal);
-        //         assert_eq!(hash(i), hash(f), "Hash mismatch between {:?} and {:?}", i, f);
-        //     }
-        // }
 
         for jcls in 0..ratio_coeffs.len() {
             let jequiv = expand_equiv_class_ratio(&ratio_coeffs[jcls]);
