@@ -24,5 +24,3 @@ let mut hasher2 = DefaultHasher::new();
 3.0f32.num_hash(&mut hasher2);
 assert_eq!(hasher1.finish(), hasher2.finish())
 ```
-
-<!-- v0.2: support num-bigint, num-complex, num-irrational -->
