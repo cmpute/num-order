@@ -1078,7 +1078,7 @@ mod _num_complex {
         use super::*;
         use num_rational::Ratio;
         impl_complex_ord_with_real! (
-            Ratio<i8> Ratio<i16> Ratio<i32> Ratio<i64> Ratio<isize>
+            Ratio<i8> Ratio<i16> Ratio<i32> Ratio<i64> Ratio<i128> Ratio<isize>
         );
 
         #[cfg(feature = "num-bigint")]

@@ -4,10 +4,7 @@
 //! Note that modulo arithmetic with Mersenne prime can be implemented more efficiently, but currently we just use
 //! the naive implementation from the `num-modular` crate.
 
-// TODO: Migrate to MontegomeryMersenne for modular operations.
-// REF: https://github.com/python/cpython/blob/3.10/Lib/fractions.py#L637
-//      https://github.com/python/cpython/blob/3.10/Python/pyhash.c#L92
-//      https://docs.rs/num-rational/0.4.0/src/num_rational/lib.rs.html#394-408
+// FIXME: Migrate to MontegomeryMersenne for modular operations.
 
 use crate::NumHash;
 
