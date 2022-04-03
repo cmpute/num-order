@@ -1,0 +1,12 @@
+# Changelog
+
+## [1.0.1] - 2022-03-31
+
+First public stable version of `num-order`! Numerical consistant order and hash comparison are fully supported for following types:
+- Unsigned integers: `u8`, `u16`, `u32`, `u64`, `u128`
+- Signed integers: `i8`, `i16`, `i32`, `i64`, `i128`
+- Float numbers: `f32`, `f64`
+- (`num-rational`) Rational numbers: `Ratio<i8>`, `Ratio<i16>`, `Ratio<i32>`, `Ratio<i64>`, `Ratio<i128>`
+- (`num-complex`) Complex numbers: `Complex<f32>`, `Complex<f64>`
+
+> v1.0.0 was yanked because `num-rational` is accidentally added as default feature.
