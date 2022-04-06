@@ -1,8 +1,8 @@
 use crate::NumOrd;
 use core::convert::TryFrom;
 use core::cmp::Ordering;
+#[cfg(feature = "num-rational")]
 use num_modular::udouble;
-use num_traits::One;
 
 // Case0: swap operand, this introduces overhead so only used for non-primitive types
 #[allow(unused_macros)]
@@ -635,7 +635,7 @@ mod _num_rational {
                 // r / f = (a * 2^(-exp)) / (man * b) if exp < 0
                 let den = udouble::widening_mul(man as u128, b);
                 if let Some(num) = || -> Option<_> {
-                    let (v, o) = udouble::one().checked_shl((-exp) as u32)?.overflowing_mul(a.into());
+                    let (v, o) = udouble{ lo: 1, hi: 0 }.checked_shl((-exp) as u32)?.overflowing_mul1(a);
                     if !o { Some(v) } else { None }
                 } () {
                     num.partial_cmp(&den).unwrap()
@@ -674,7 +674,7 @@ mod _num_rational {
                 // r / f = (a * 2^(-exp)) / (man * b) if exp < 0
                 let den = udouble::widening_mul(man as u128, b);
                 if let Some(num) = || -> Option<_> {
-                    let (v, o) = udouble::one().checked_shl((-exp) as u32)?.overflowing_mul(a.into());
+                    let (v, o) = udouble{ lo: 1, hi: 0 }.checked_shl((-exp) as u32)?.overflowing_mul1(a);
                     if !o { Some(v) } else { None }
                 } () {
                     num.partial_cmp(&den).unwrap()

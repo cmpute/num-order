@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.0.2] - 2022-04-06
+
+Bump the version of dependency `num-modular`, use `MersenneInt` for more efficient hashing.
+
 ## [1.0.1] - 2022-03-31
 
 First public stable version of `num-order`! Numerical consistant order and hash comparison are fully supported for following types:

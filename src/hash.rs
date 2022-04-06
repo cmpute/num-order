@@ -8,17 +8,17 @@
 
 use crate::NumHash;
 
-use num_modular::ModularCoreOps;
-#[cfg(feature = "num-rational")]
-use num_modular::ModularOps;
+use num_modular::{ModularAbs, MersenneInt, ModularInteger};
 use num_traits::float::FloatCore;
+#[cfg(feature = "num-rational")]
+use num_traits::Inv;
 use core::hash::{Hash, Hasher};
 
 const M127: i128 = i128::MAX; // a Mersenne prime
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
 #[cfg(feature = "num-complex")]
-const PROOT: u128 = i32::MAX as u128; // a Mersenne prime
+const PROOT: MersenneInt::<127, 1> = MersenneInt::new(i32::MAX as u128); // a Mersenne prime
 const HASH_INF: i128 = i128::MAX;
 const HASH_NEGINF: i128 = i128::MIN;
 
@@ -108,10 +108,11 @@ fn hash_float<T: FloatCore>(v: &T) -> i128 {
         }
     } else {
         let (mantissa, exp, sign) = v.integer_decode();
+        let mantissa = MersenneInt::<127, 1>::new(mantissa as u128);
         // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
-        let exp = if exp > 0 { (exp as u16) % 127 } else { ModularCoreOps::<u16>::negm(&(-exp as u16), &127) };
-        let v = (mantissa as u128).mulm(1u128 << exp, &M127U);
-        v as i128 * sign as i128
+        let pow = mantissa.convert(1 << exp.absm(&127));
+        let v = mantissa * pow;
+        v.residue() as i128 * sign as i128
     }
 }
 
@@ -139,17 +140,19 @@ mod _num_rational {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
                     let ub = *self.denom() as u128; // denom is always positive in Ratio
                     let binv = if ub != M127U {
-                        ModularOps::<&u128>::invm(&ub, &M127U).unwrap()
+                        MersenneInt::<127, 1>::new(ub).inv()
                     } else {
-                        HASH_NEGINF as u128 // no modular inverse, use NEGINF as the result
+                        // no modular inverse, use NEGINF as the result
+                        MersenneInt::<127, 1>::new(HASH_NEGINF as u128)
                     };
 
                     let ua = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 };
-                    let ab = ua.mulm(binv, &M127U);
+                    let ua = binv.convert(ua);
+                    let ab = (ua * binv).residue() as i128;
                     if self.numer() >= &0 {
-                        (ab as i128).hash(state)
+                        ab.hash(state)
                     } else {
-                        (ab as i128).neg().hash(state)
+                        ab.neg().hash(state)
                     }
                 }
             }
@@ -168,17 +171,19 @@ mod _num_rational {
             fn num_hash<H: Hasher>(&self, state: &mut H) {
                 let ub = (self.denom().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
                 let binv = if !ub.is_zero() {
-                    ModularOps::<&u128>::invm(&ub, &M127U).unwrap()
+                    MersenneInt::<127, 1>::new(ub).inv()
                 } else {
-                    HASH_NEGINF as u128 // no modular inverse, use NEGINF as the result
+                    // no modular inverse, use NEGINF as the result
+                    MersenneInt::<127, 1>::new(HASH_NEGINF as u128)
                 };
 
                 let ua = (self.numer().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
-                let ab = ua.mulm(binv, &M127U);
+                let ua = binv.convert(ua);
+                let ab = (ua * binv).residue() as i128;
                 if self.numer().is_negative() {
-                    (ab as i128).neg().hash(state)
+                    ab.neg().hash(state)
                 } else {
-                    (ab as i128).hash(state)
+                    ab.hash(state)
                 }
             }
         }
@@ -205,11 +210,11 @@ mod _num_complex {
                     let b = hash_float(&self.im);
         
                     let bterm = if b >= 0 {
-                        let pb = PROOT.mulm(b as u128, &M127U);
-                        -(pb.mulm(pb, &M127U) as i128)
+                        let pb = PROOT * MersenneInt::new(b as u128);
+                        -((pb * pb).residue() as i128)
                     } else {
-                        let pb = PROOT.mulm((-b) as u128, &M127U);
-                        pb.mulm(pb, &M127U) as i128
+                        let pb = PROOT * MersenneInt::new((-b) as u128);
+                        (pb * pb).residue() as i128
                     };
                     (a + bterm).num_hash(state)
                 }
