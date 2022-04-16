@@ -105,3 +105,5 @@ pub trait NumHash {
 mod ord;
 mod hash;
 #[cfg(test)] mod tests;
+
+// TODO: support num-irrational::{QuadraticSurd, QuadraticInt} when their API is stablized

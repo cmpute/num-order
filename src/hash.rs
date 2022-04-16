@@ -4,8 +4,6 @@
 //! Note that modulo arithmetic with Mersenne prime can be implemented more efficiently, but currently we just use
 //! the naive implementation from the `num-modular` crate.
 
-// FIXME: Migrate to MontegomeryMersenne for modular operations.
-
 use crate::NumHash;
 
 use num_modular::{ModularAbs, MersenneInt, ModularInteger};
