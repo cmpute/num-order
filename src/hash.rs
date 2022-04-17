@@ -12,11 +12,12 @@ use num_traits::float::FloatCore;
 use num_traits::Inv;
 use core::hash::{Hash, Hasher};
 
+type MInt = MersenneInt::<127, 1>;
 const M127: i128 = i128::MAX; // a Mersenne prime
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
 #[cfg(feature = "num-complex")]
-const PROOT: MersenneInt::<127, 1> = MersenneInt::new(i32::MAX as u128); // a Mersenne prime
+const PROOT: MInt = MInt::new(i32::MAX as u128); // a Mersenne prime
 const HASH_INF: i128 = i128::MAX;
 const HASH_NEGINF: i128 = i128::MIN;
 
@@ -106,7 +107,7 @@ fn hash_float<T: FloatCore>(v: &T) -> i128 {
         }
     } else {
         let (mantissa, exp, sign) = v.integer_decode();
-        let mantissa = MersenneInt::<127, 1>::new(mantissa as u128);
+        let mantissa = MInt::new(mantissa as u128);
         // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
         let pow = mantissa.convert(1 << exp.absm(&127));
         let v = mantissa * pow;
@@ -138,10 +139,10 @@ mod _num_rational {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
                     let ub = *self.denom() as u128; // denom is always positive in Ratio
                     let binv = if ub != M127U {
-                        MersenneInt::<127, 1>::new(ub).inv()
+                        MInt::new(ub).inv()
                     } else {
                         // no modular inverse, use NEGINF as the result
-                        MersenneInt::<127, 1>::new(HASH_NEGINF as u128)
+                        MInt::new(HASH_NEGINF as u128)
                     };
 
                     let ua = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 };
@@ -169,10 +170,10 @@ mod _num_rational {
             fn num_hash<H: Hasher>(&self, state: &mut H) {
                 let ub = (self.denom().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
                 let binv = if !ub.is_zero() {
-                    MersenneInt::<127, 1>::new(ub).inv()
+                    MInt::new(ub).inv()
                 } else {
                     // no modular inverse, use NEGINF as the result
-                    MersenneInt::<127, 1>::new(HASH_NEGINF as u128)
+                    MInt::new(HASH_NEGINF as u128)
                 };
 
                 let ua = (self.numer().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
@@ -208,10 +209,10 @@ mod _num_complex {
                     let b = hash_float(&self.im);
         
                     let bterm = if b >= 0 {
-                        let pb = PROOT * MersenneInt::new(b as u128);
+                        let pb = PROOT * MInt::new(b as u128);
                         -((pb * pb).residue() as i128)
                     } else {
-                        let pb = PROOT * MersenneInt::new((-b) as u128);
+                        let pb = PROOT * MInt::new((-b) as u128);
                         (pb * pb).residue() as i128
                     };
                     (a + bterm).num_hash(state)
