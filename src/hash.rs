@@ -6,18 +6,19 @@
 
 use crate::NumHash;
 
-use num_modular::{ModularAbs, MersenneInt, ModularInteger};
+use num_modular::{ModularAbs, FixedMersenneInt, ModularInteger};
 use num_traits::float::FloatCore;
 #[cfg(feature = "num-rational")]
 use num_traits::Inv;
 use core::hash::{Hash, Hasher};
 
-type MInt = MersenneInt::<127, 1>;
-const M127: i128 = i128::MAX; // a Mersenne prime
+// we use 2^127 - 1 (a Mersenne prime) as modulus
+type MInt = FixedMersenneInt::<127, 1>;
+const M127: i128 = i128::MAX;
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
 #[cfg(feature = "num-complex")]
-const PROOT: MInt = MInt::new(i32::MAX as u128); // a Mersenne prime
+const PROOT: u128 = i32::MAX as u128; // a Mersenne prime
 const HASH_INF: i128 = i128::MAX;
 const HASH_NEGINF: i128 = i128::MIN;
 
@@ -107,7 +108,7 @@ fn hash_float<T: FloatCore>(v: &T) -> i128 {
         }
     } else {
         let (mantissa, exp, sign) = v.integer_decode();
-        let mantissa = MInt::new(mantissa as u128);
+        let mantissa = MInt::new(mantissa as u128, &M127U);
         // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
         let pow = mantissa.convert(1 << exp.absm(&127));
         let v = mantissa * pow;
@@ -139,19 +140,19 @@ mod _num_rational {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
                     let ub = *self.denom() as u128; // denom is always positive in Ratio
                     let binv = if ub != M127U {
-                        MInt::new(ub).inv()
+                        MInt::new(ub, &M127U).inv()
                     } else {
                         // no modular inverse, use NEGINF as the result
-                        MInt::new(HASH_NEGINF as u128)
+                        MInt::new(HASH_NEGINF as u128, &M127U)
                     };
 
                     let ua = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 };
                     let ua = binv.convert(ua);
                     let ab = (ua * binv).residue() as i128;
                     if self.numer() >= &0 {
-                        ab.hash(state)
+                        ab.num_hash(state)
                     } else {
-                        ab.neg().hash(state)
+                        ab.neg().num_hash(state)
                     }
                 }
             }
@@ -170,19 +171,19 @@ mod _num_rational {
             fn num_hash<H: Hasher>(&self, state: &mut H) {
                 let ub = (self.denom().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
                 let binv = if !ub.is_zero() {
-                    MInt::new(ub).inv()
+                    MInt::new(ub, &M127U).inv()
                 } else {
                     // no modular inverse, use NEGINF as the result
-                    MInt::new(HASH_NEGINF as u128)
+                    MInt::new(HASH_NEGINF as u128, &M127U)
                 };
 
                 let ua = (self.numer().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
                 let ua = binv.convert(ua);
                 let ab = (ua * binv).residue() as i128;
                 if self.numer().is_negative() {
-                    ab.neg().hash(state)
+                    ab.neg().num_hash(state)
                 } else {
-                    ab.hash(state)
+                    ab.num_hash(state)
                 }
             }
         }
@@ -207,12 +208,12 @@ mod _num_complex {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
                     let a = hash_float(&self.re);
                     let b = hash_float(&self.im);
-        
+
                     let bterm = if b >= 0 {
-                        let pb = PROOT * MInt::new(b as u128);
+                        let pb = MInt::new(b as u128, &M127U) * PROOT;
                         -((pb * pb).residue() as i128)
                     } else {
-                        let pb = PROOT * MInt::new((-b) as u128);
+                        let pb = MInt::new((-b) as u128, &M127U) * PROOT;
                         (pb * pb).residue() as i128
                     };
                     (a + bterm).num_hash(state)
