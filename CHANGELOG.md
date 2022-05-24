@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.4] - 2022-05-23
+
+Bump the version of dependency `num-modular`.
+
+## [1.0.3] - 2022-04-17
+
+Bump the version of dependency `num-modular`.
+
 ## [1.0.2] - 2022-04-06
 
 Bump the version of dependency `num-modular`, use `MersenneInt` for more efficient hashing.
