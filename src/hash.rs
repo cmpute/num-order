@@ -7,9 +7,6 @@
 use crate::NumHash;
 
 use num_modular::{ModularAbs, FixedMersenneInt, ModularInteger};
-use num_traits::float::FloatCore;
-#[cfg(feature = "num-rational")]
-use num_traits::Inv;
 use core::hash::{Hash, Hasher};
 
 // we use 2^127 - 1 (a Mersenne prime) as modulus
@@ -97,41 +94,100 @@ mod _num_bigint {
     }
 }
 
-fn hash_float<T: FloatCore>(v: &T) -> i128 {
-    if v.is_nan() {
-        0i128 // assign 0 to nan
-    } else if v.is_infinite() {
-        if v.is_sign_positive() {
-            HASH_INF
+// Case3: for rational(a, b) including floating numbers, the hash is `hash(a * b^-1 mod M127)` (b > 0)
+trait FloatHash {
+    // Calculate mantissa * exponent^-1 mod M127
+    fn fhash(&self) -> i128;
+}
+
+impl FloatHash for f32 {
+    fn fhash(&self) -> i128 {
+        let bits = self.to_bits();
+        let sign_bit = bits >> 31;
+        let mantissa_bits = bits & 0x7fffff;
+        let mut exponent: i16 = ((bits >> 23) & 0xff) as i16;
+
+        if exponent == 0xff {
+            // deal with special floats
+            if mantissa_bits != 0 { // nan
+                0i128
+            } else if sign_bit > 0 {
+                HASH_NEGINF // -inf
+            } else {
+                HASH_INF // inf
+            }
         } else {
-            HASH_NEGINF
+            // then deal with normal floats
+            let mantissa = if exponent == 0 {
+                mantissa_bits << 1
+            } else {
+                mantissa_bits | 0x800000
+            };
+            exponent -= 0x7f + 23;
+            
+            // calculate hash
+            let mantissa = MInt::new(mantissa as u128, &M127U);
+            // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
+            let pow = mantissa.convert(1 << exponent.absm(&127));
+            let v = mantissa * pow;
+            v.residue() as i128 * if sign_bit == 0 { 1 } else { -1 }
         }
-    } else {
-        let (mantissa, exp, sign) = v.integer_decode();
-        let mantissa = MInt::new(mantissa as u128, &M127U);
-        // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
-        let pow = mantissa.convert(1 << exp.absm(&127));
-        let v = mantissa * pow;
-        v.residue() as i128 * sign as i128
     }
 }
 
-// Case3: for rational(a, b), the hash is `hash(a * b^-1 mod M127)` (b > 0)
-macro_rules! impl_hash_for_float {
-    ($($float:ty)*) => ($(
-        impl NumHash for $float {
-            fn num_hash<H: Hasher>(&self, state: &mut H) {
-                hash_float(self).num_hash(state)
-            }
-        }
-    )*);
+impl NumHash for f32 {
+    fn num_hash<H: Hasher>(&self, state: &mut H) {
+        self.fhash().num_hash(state)
+    }
 }
-impl_hash_for_float! { f32 f64 }
+
+impl FloatHash for f64 {
+    fn fhash(&self) -> i128 {
+        let bits = self.to_bits();
+        let sign_bit = bits >> 63;
+        let mantissa_bits = bits & 0xfffffffffffff;
+        let mut exponent: i16 = ((bits >> 52) & 0x7ff) as i16;
+
+        if exponent == 0x7ff {
+            // deal with special floats
+            if mantissa_bits != 0 { // nan
+                0i128
+            } else if sign_bit > 0 {
+                HASH_NEGINF // -inf
+            } else {
+                HASH_INF // inf
+            }
+        } else {
+            // deal with normal floats
+            let mantissa = if exponent == 0 {
+                mantissa_bits << 1
+            } else {
+                mantissa_bits | 0x10000000000000
+            };
+            // Exponent bias + mantissa shift
+            exponent -= 0x3ff + 52;
+
+            // calculate hash
+            let mantissa = MInt::new(mantissa as u128, &M127U);
+            // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
+            let pow = mantissa.convert(1 << exponent.absm(&127));
+            let v = mantissa * pow;
+            v.residue() as i128 * if sign_bit == 0 { 1 } else { -1 }
+        }
+    }
+}
+
+impl NumHash for f64 {
+    fn num_hash<H: Hasher>(&self, state: &mut H) {
+        self.fhash().num_hash(state)
+    }
+}
 
 #[cfg(feature = "num-rational")]
 mod _num_rational {
     use super::*;
     use core::ops::Neg;
+    use num_traits::Inv;
     use num_rational::Ratio;
 
     macro_rules! impl_hash_for_ratio {
@@ -206,8 +262,8 @@ mod _num_complex {
         ($($float:ty)*) => ($(
             impl NumHash for Complex<$float> {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
-                    let a = hash_float(&self.re);
-                    let b = hash_float(&self.im);
+                    let a = self.re.fhash();
+                    let b = self.im.fhash();
 
                     let bterm = if b >= 0 {
                         let pb = MInt::new(b as u128, &M127U) * PROOT;

@@ -43,8 +43,6 @@
 #![no_std]
 #[cfg(any(feature = "std", test))]
 extern crate std;
-#[cfg(all(not(feature = "std"), feature = "libm"))]
-extern crate libm;
 
 use core::cmp::Ordering;
 use core::hash::Hasher;

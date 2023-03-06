@@ -123,20 +123,21 @@ impl_ord_between_diff_sign! {
 
 // Case4: special handling for comparing float and integer types
 // Note: if `a` is an integer, `a cmp b` equals to `(a, trunc(b)) cmp (trunc(b), b)` (lexicographically)
-#[cfg(feature = "libm")]
-trait Trunc {
-    fn trunc(self) -> Self;
+
+trait FloatExp {
+    /// Get the exponent of a float number
+    fn e(self) -> i16;
 }
-#[cfg(feature = "libm")]
-impl Trunc for f32 {
-    fn trunc(self) -> Self {
-        libm::truncf(self)
+impl FloatExp for f32 {
+    #[inline]
+    fn e(self) -> i16 {
+        (self.to_bits() >> 23 & 0xff) as i16 - (0x7f + 23)
     }
 }
-#[cfg(feature = "libm")]
-impl Trunc for f64 {
-    fn trunc(self) -> Self {
-        libm::trunc(self)
+impl FloatExp for f64 {
+    #[inline]
+    fn e(self) -> i16 {
+        (self.to_bits() >> 52 & 0x7ff) as i16 - (0x3ff + 52)
     }
 }
 
@@ -151,9 +152,11 @@ macro_rules! impl_ord_between_int_float {
                     Some(Ordering::Greater)
                 } else if other >= &(<$int>::MAX as $float) { // integer max is not on binary boundary
                     Some(Ordering::Less)
+                } else if other.e() >= 0 { // the float has no fractional part
+                    self.partial_cmp(&(*other as $int))
                 } else {
-                    let trunc = other.trunc();
-                    (self, &trunc).partial_cmp(&(&(trunc as $int), other))
+                    let trunc = *other as $int;
+                    (*self, trunc as $float).partial_cmp(&(trunc, *other))
                 }
             }
         }
@@ -166,9 +169,11 @@ macro_rules! impl_ord_between_int_float {
                     Some(Ordering::Less)
                 } else if self >= &(<$int>::MAX as $float) { // integer max is not on binary boundary
                     Some(Ordering::Greater)
+                } else if self.e() >= 0 { // the float has no fractional part
+                    (*self as $int).partial_cmp(other)
                 } else {
-                    let trunc = self.trunc();
-                    (&(trunc as $int), self).partial_cmp(&(other, &trunc))
+                    let trunc = *other as $int;
+                    (trunc, *self).partial_cmp(&(*other, trunc as $float))
                 }
             }
         }
