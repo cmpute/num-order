@@ -187,7 +187,6 @@ impl NumHash for f64 {
 mod _num_rational {
     use super::*;
     use core::ops::Neg;
-    use num_traits::Inv;
     use num_rational::Ratio;
 
     macro_rules! impl_hash_for_ratio {
@@ -196,7 +195,7 @@ mod _num_rational {
                 fn num_hash<H: Hasher>(&self, state: &mut H) {
                     let ub = *self.denom() as u128; // denom is always positive in Ratio
                     let binv = if ub != M127U {
-                        MInt::new(ub, &M127U).inv()
+                        MInt::new(ub, &M127U).inv().unwrap()
                     } else {
                         // no modular inverse, use NEGINF as the result
                         MInt::new(HASH_NEGINF as u128, &M127U)
@@ -227,7 +226,7 @@ mod _num_rational {
             fn num_hash<H: Hasher>(&self, state: &mut H) {
                 let ub = (self.denom().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
                 let binv = if !ub.is_zero() {
-                    MInt::new(ub, &M127U).inv()
+                    MInt::new(ub, &M127U).inv().unwrap()
                 } else {
                     // no modular inverse, use NEGINF as the result
                     MInt::new(HASH_NEGINF as u128, &M127U)
