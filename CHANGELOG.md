@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## [1.1.0] - 2023-08-29
 
-Now the crate `num-traits` is an optional dependency, and the `libm` dependency is removed.
+Now the crate `num-traits` is an optional dependency, and the `libm` dependency is removed. The dependency version of `num-modular` is updated to v0.6.
 
 ## [1.0.4] - 2022-05-23
 
