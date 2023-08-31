@@ -1,16 +1,16 @@
 use super::*;
-use std::hash::{Hash, Hasher};
-use std::fmt;
-use std::vec::Vec;
-use std::collections::hash_map::DefaultHasher;
 use std::cmp::Ordering::{self, *};
+use std::collections::hash_map::DefaultHasher;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::vec::Vec;
 
 #[cfg(feature = "num-bigint")]
 use num_bigint::{BigInt, BigUint};
-#[cfg(feature = "num-rational")]
-use num_rational::Ratio;
 #[cfg(feature = "num-complex")]
 use num_complex::Complex;
+#[cfg(feature = "num-rational")]
+use num_rational::Ratio;
 
 #[derive(Clone, Debug)]
 #[allow(non_camel_case_types)]
@@ -89,7 +89,7 @@ macro_rules! n {
     ($e:expr; $($t:ident),*) => (&[$(N::$t($e as $t)),*]);
 }
 
-const B32: f64 = (1u64<<32) as f64;
+const B32: f64 = (1u64 << 32) as f64;
 const F32_SUBNORMAL_MIN: f32 = 1.4e-45;
 const F64_SUBNORMAL_MIN: f64 = 4.9e-324;
 

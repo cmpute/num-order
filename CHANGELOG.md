@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0] - 2023-08-30
+
+- Bump the version of `num-modular` to prevent a bug.
+- The hash values of negative infinity and NaN are changed.
+- The hash values of rationals with a multiple of M127 are changed.
+
+> It's not released as a new major version because the previously designed values are not intended. It's set by mistake.
+
 ## [1.1.0] - 2023-08-29
 
 Now the crate `num-traits` is an optional dependency, and the `libm` dependency is removed. The dependency version of `num-modular` is updated to v0.6.

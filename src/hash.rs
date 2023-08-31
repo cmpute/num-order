@@ -1,23 +1,31 @@
 //! We use the Mersenne prime 2^127-1 (i128::MAX) as the main modulo, which maximize the space of available hashing slots.
 //! (The largest Mersenne prime under 2^64 is only 2^61-1, so we use u128 for hashing which is also future proof).
-//! 
-//! Note that modulo arithmetic with Mersenne prime can be implemented more efficiently, but currently we just use
-//! the naive implementation from the `num-modular` crate.
+//!
+//! The basic algorithm is similar to what is used in Python (see https://docs.python.org/3.8/library/stdtypes.html#hashing-of-numeric-types),
+//! specifically if the numerically consistent hash function is denoted as num_hash, then:
+//! - for an integer n: num_hash(n) = sgn(n) * (|n| % M127)
+//! - for a rational number n/d (including floating numbers): sgn(n/d) * num_hash(|n|) * (num_hash(|d|)^-1 mod M127)
+//! - for special values: num_hash(NaN) and num_hash(±∞) are specially chosen such that it won't overlap with normal numbers.
 
 use crate::NumHash;
 
-use num_modular::{ModularAbs, FixedMersenneInt, ModularInteger};
 use core::hash::{Hash, Hasher};
+use num_modular::{FixedMersenneInt, ModularAbs, ModularInteger};
 
 // we use 2^127 - 1 (a Mersenne prime) as modulus
-type MInt = FixedMersenneInt::<127, 1>;
+type MInt = FixedMersenneInt<127, 1>;
 const M127: i128 = i128::MAX;
 const M127U: u128 = M127 as u128;
 const M127D: u128 = M127U + M127U;
+const HASH_INF: i128 = i128::MAX; // 2^127 - 1
+const HASH_NEGINF: i128 = i128::MIN + 1; // -(2^127 - 1)
+const HASH_NAN: i128 = i128::MIN; // -2^127
+
 #[cfg(feature = "num-complex")]
 const PROOT: u128 = i32::MAX as u128; // a Mersenne prime
-const HASH_INF: i128 = i128::MAX;
-const HASH_NEGINF: i128 = i128::MIN;
+
+// TODO (v2.0): Use the coefficients of the characteristic polynomial to represent a number. By this way
+//              all algebraic numbers can be represented including complex and quadratic numbers.
 
 // Case1: directly hash the i128 and u128 number (mod M127)
 impl NumHash for i128 {
@@ -38,7 +46,7 @@ impl NumHash for u128 {
             u128::MAX => 1i128.hash(state),
             M127D => 0i128.hash(state),
             u if u >= M127U => ((u - M127U) as i128).hash(state),
-            u => (u as i128).hash(state)
+            u => (u as i128).hash(state),
         }
     }
 }
@@ -109,8 +117,9 @@ impl FloatHash for f32 {
 
         if exponent == 0xff {
             // deal with special floats
-            if mantissa_bits != 0 { // nan
-                0i128
+            if mantissa_bits != 0 {
+                // nan
+                HASH_NAN
             } else if sign_bit > 0 {
                 HASH_NEGINF // -inf
             } else {
@@ -124,7 +133,7 @@ impl FloatHash for f32 {
                 mantissa_bits | 0x800000
             };
             exponent -= 0x7f + 23;
-            
+
             // calculate hash
             let mantissa = MInt::new(mantissa as u128, &M127U);
             // m * 2^e mod M127 = m * 2^(e mod 127) mod M127
@@ -150,8 +159,9 @@ impl FloatHash for f64 {
 
         if exponent == 0x7ff {
             // deal with special floats
-            if mantissa_bits != 0 { // nan
-                0i128
+            if mantissa_bits != 0 {
+                // nan
+                HASH_NAN
             } else if sign_bit > 0 {
                 HASH_NEGINF // -inf
             } else {
@@ -197,11 +207,11 @@ mod _num_rational {
                     let binv = if ub != M127U {
                         MInt::new(ub, &M127U).inv().unwrap()
                     } else {
-                        // no modular inverse, use NEGINF as the result
-                        MInt::new(HASH_NEGINF as u128, &M127U)
+                        // no modular inverse, use INF or NEGINF as the result
+                        return if self.numer() > &0 { HASH_INF.num_hash(state) } else { HASH_NEGINF.num_hash(state) }
                     };
 
-                    let ua = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 };
+                    let ua = if self.numer() < &0 { (*self.numer() as u128).wrapping_neg() } else { *self.numer() as u128 }; // essentially calculate |self.numer()|
                     let ua = binv.convert(ua);
                     let ab = (ua * binv).residue() as i128;
                     if self.numer() >= &0 {
@@ -220,19 +230,27 @@ mod _num_rational {
     mod _num_bigint {
         use super::*;
         use num_bigint::{BigInt, BigUint};
-        use num_traits::{ToPrimitive, Zero, Signed};
+        use num_traits::{Signed, ToPrimitive, Zero};
 
         impl NumHash for Ratio<BigInt> {
             fn num_hash<H: Hasher>(&self, state: &mut H) {
-                let ub = (self.denom().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
+                let ub = (self.denom().magnitude() % BigUint::from(M127U))
+                    .to_u128()
+                    .unwrap();
                 let binv = if !ub.is_zero() {
                     MInt::new(ub, &M127U).inv().unwrap()
                 } else {
-                    // no modular inverse, use NEGINF as the result
-                    MInt::new(HASH_NEGINF as u128, &M127U)
+                    // no modular inverse, use INF or NEGINF as the result
+                    return if self.numer().is_negative() {
+                        HASH_NEGINF.num_hash(state)
+                    } else {
+                        HASH_INF.num_hash(state)
+                    };
                 };
 
-                let ua = (self.numer().magnitude() % BigUint::from(M127U)).to_u128().unwrap();
+                let ua = (self.numer().magnitude() % BigUint::from(M127U))
+                    .to_u128()
+                    .unwrap();
                 let ua = binv.convert(ua);
                 let ab = (ua * binv).residue() as i128;
                 if self.numer().is_negative() {
